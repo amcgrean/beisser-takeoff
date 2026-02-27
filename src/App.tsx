@@ -52,29 +52,29 @@ export default function App() {
         downloadCsv(lineItems, inputs.setup);
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500 animate-pulse">Loading takeoff data...</div>;
+    if (loading) return <div className="p-8 text-center text-slate-300 animate-pulse">Loading takeoff data...</div>;
 
     return (
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen">
             <div className="max-w-6xl mx-auto px-4 py-8">
                 <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-                            House Estimator <span className="text-blue-600">Takeoff</span>
+                        <h1 className="text-3xl font-extrabold text-white tracking-tight">
+                            House Estimator <span className="text-cyan-300">Takeoff</span>
                         </h1>
-                        <p className="text-slate-500 font-medium">Beisser Lumber Co. Digital Estimator</p>
+                        <p className="text-slate-300 font-medium">Beisser Lumber Co. Digital Estimator</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setView(view === 'takeoff' ? 'summary' : 'takeoff')}
-                            className="px-4 py-2 rounded-lg font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition shadow-sm"
+                            className="px-4 py-2 rounded-lg font-semibold bg-slate-900/70 border border-white/15 text-slate-100 hover:bg-slate-800 transition shadow-sm"
                         >
                             {view === 'takeoff' ? 'Show Bid Summary' : 'Back to Takeoff'}
                         </button>
                         <button
                             onClick={handleExport}
                             disabled={lineItems.length === 0}
-                            className="px-6 py-2 rounded-lg font-bold bg-blue-600 text-white hover:bg-blue-700 transition shadow-md disabled:bg-slate-300 disabled:shadow-none"
+                            className="px-6 py-2 rounded-lg font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition shadow-md disabled:bg-slate-700 disabled:text-slate-400 disabled:shadow-none"
                         >
                             Export Agility CSV
                         </button>
@@ -92,26 +92,26 @@ export default function App() {
                         </div>
 
                         <div className="lg:col-span-1">
-                            <div className="card sticky top-8 border-none ring-1 ring-slate-200">
-                                <div className="p-4 bg-slate-800 font-bold text-white flex justify-between items-center">
+                            <div className="card sticky top-8">
+                                <div className="p-4 bg-slate-950/90 font-bold text-white flex justify-between items-center border-b border-white/10">
                                     <span>Estimate Review</span>
-                                    <span className="bg-blue-500 px-2 py-0.5 rounded text-xs">{lineItems.length} items</span>
+                                    <span className="bg-cyan-400 text-slate-950 px-2 py-0.5 rounded text-xs">{lineItems.length} items</span>
                                 </div>
-                                <div className="p-0 divide-y divide-slate-100 max-h-[70vh] overflow-y-auto">
+                                <div className="p-0 divide-y divide-slate-800 max-h-[70vh] overflow-y-auto">
                                     {lineItems.length === 0 && (
                                         <div className="p-8 text-center">
                                             <p className="text-slate-400 text-sm italic">No items yet. Enter some dimensions to see your estimate.</p>
                                         </div>
                                     )}
                                     {lineItems.map((item, idx) => (
-                                        <div key={idx} className="p-4 hover:bg-slate-50 transition-colors">
+                                        <div key={idx} className="p-4 hover:bg-slate-800/50 transition-colors">
                                             <div className="flex justify-between items-start mb-1">
-                                                <span className="font-semibold text-slate-800 text-sm leading-tight">{item.description}</span>
-                                                <span className="font-bold text-blue-600 text-sm whitespace-nowrap ml-2">{item.qty} {item.uom}</span>
+                                                <span className="font-semibold text-slate-100 text-sm leading-tight">{item.description}</span>
+                                                <span className="font-bold text-cyan-300 text-sm whitespace-nowrap ml-2">{item.qty} {item.uom}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">{item.sku}</span>
-                                                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{item.group}</span>
+                                                <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">{item.sku}</span>
+                                                <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">{item.group}</span>
                                             </div>
                                             {item.warning && (
                                                 <div className="mt-2 text-[11px] bg-red-50 text-red-600 p-2 rounded border border-red-100 font-medium animate-pulse">
