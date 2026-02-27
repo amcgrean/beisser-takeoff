@@ -29,7 +29,7 @@ const initialInputs: JobInputs = {
     trim: { baseType: '', caseType: '', doorCounts: { single68: 0, single80: 0, double30: 0, double40: 0, double50: 0, bifold40: 0, bifold50: 0, bifold30: 0 }, windowCount: 0, windowLF: 0, handrailType: '', handrailLF: 0 },
     hardware: { type: '', counts: { keyed: 0, passage: 0, privacy: 0, dummy: 0, deadbolt: 0, handleset: 0, stopHinged: 0, stopSpring: 0, fingerPull: 0, bifoldKnob: 0, pocketLock: 0, insideTrim: 0 } },
     exteriorDeck: { joistSize: '2x8', beamSize: '2x10', deckingType: 'Treated', deckingLengths: [], railingStyle: 'Treated', railingLF: 0, postCount: 0, stairCount: 0, landing: false },
-    windowsDoors: { windowCount: 0, doorCount: 0 },
+    windowsDoors: { windowCount: 0, doors: [] },
     options: []
 };
 
@@ -76,6 +76,8 @@ export default function App() {
                 trimSwitches: dataCache.trimSwitches,
                 railingMatrix: dataCache.railingMatrix,
                 osbSheeting: dataCache.osbSheeting,
+                doorStyles: dataCache.doorStyles,
+                customerOverrides: dataCache.customerOverrides,
             });
             setLineItems(items);
         }

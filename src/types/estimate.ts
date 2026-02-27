@@ -14,6 +14,12 @@ export interface MaterialSelections {
     roofSheetingSize: string;
 }
 
+export interface HeaderEntry {
+    size: string;       // e.g. '1.75x9.5', '2x10'
+    length_ft: number;  // e.g. 12 — used to build LVL item code
+    count: number;
+}
+
 export interface WallSection {
     ext2x4_8ft: number;
     ext2x4_9ft: number;
@@ -24,7 +30,7 @@ export interface WallSection {
     intWallLF: number;
     beamLF: number;
     stairCount: number;
-    headers: { size: string; count: number }[];
+    headers: HeaderEntry[];
 }
 
 export interface BasementSection extends WallSection {
@@ -114,6 +120,14 @@ export interface ExteriorDeckSection {
     landing: boolean;
 }
 
+// Door entry for the Windows & Doors section — resolves to door_styles.json SKU
+export interface DoorEntry {
+    style: string;      // 'Madison' | 'Cambridge' | 'Continental' | 'Craftsman'
+    sizeKey: string;    // e.g. 'slab.28', 'bi.40', 'dh.50', 'sh.30'
+    hcSc: 'hc' | 'sc'; // hollow core vs solid core
+    count: number;
+}
+
 export interface JobInputs {
     setup: JobSetup;
     materials: MaterialSelections;
@@ -126,7 +140,7 @@ export interface JobInputs {
     trim: TrimSection;
     hardware: HardwareSection;
     exteriorDeck: ExteriorDeckSection;
-    windowsDoors: { windowCount: number; doorCount: number };
+    windowsDoors: { windowCount: number; doors: DoorEntry[] };
     options: { description: string; price: number }[];
 }
 
@@ -157,6 +171,7 @@ export interface Multipliers {
         osb_sf_per_panel: { value: number };
     };
     moisture_barrier: {
+        sill_seal_roll_lf?: { value: number };
         tyvek_9ft: { value: number };
         tyvek_10ft: { value: number };
     };
@@ -169,8 +184,8 @@ export interface Multipliers {
 
 export interface Branch {
     branch_id: string;
-    name: string;
-    stud_sku_override?: string;
+    display_name: string;
+    stud_sku: string;
 }
 
 export interface HardwareMatrix {

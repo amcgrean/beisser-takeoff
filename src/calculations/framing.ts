@@ -2,7 +2,7 @@ import { WallSection, LineItem, JobInputs, Multipliers } from '../types/estimate
 
 export function getLVLCode(size: string, length_ft: number, engineeredLumber: any): string {
     const entry = engineeredLumber?.size_to_prefix?.find((e: any) => e.size === size);
-    if (!entry) return `HDR-${size}-${length_ft}ft`;
+    if (!entry) return `HDR-${size.replace(/[^a-z0-9]/gi, '')}-${String(length_ft).padStart(2, '0')}`;
     return entry.prefix + String(length_ft).padStart(2, '0');
 }
 
@@ -12,7 +12,8 @@ export function calculateFraming(
     inputs: JobInputs,
     multipliers: Multipliers,
     engineeredLumber?: any,
-    branches?: any[]
+    branches?: any[],
+    customerOverrides?: any
 ): LineItem[] {
     const items: LineItem[] = [];
     const { plateType, wallSize, triplePlate } = inputs.materials;
@@ -22,156 +23,119 @@ export function calculateFraming(
         ? multipliers.framing.stud_multiplier_basement.value
         : multipliers.framing.stud_multiplier_main.value;
 
-    const totalLF = section.ext2x4_8ft + section.ext2x4_9ft + section.ext2x4_10ft +
+    const totalLF =
+        section.ext2x4_8ft + section.ext2x4_9ft + section.ext2x4_10ft +
         section.ext2x6_8ft + section.ext2x6_9ft + section.ext2x6_10ft +
         section.intWallLF;
 
     if (totalLF <= 0) return items;
 
-    // Branch override for stud SKU
-    let studSku = wallSize === '2x4' ? '02048fir092' : '02068fir092';
+    // ── Branch stud SKU override (branches.json field is "stud_sku") ───────────
     const branchData = branches?.find((b: any) => b.branch_id === inputs.setup.branch);
-    if (branchData?.stud_sku_override) {
-        studSku = branchData.stud_sku_override;
-    }
+    let studSku = branchData?.stud_sku ?? (wallSize === '2x4' ? '0204studfir08' : '0206studfir09');
 
-    // Studs
+    // ── Studs ────────────────────────────────────────────────────────────────────
     const studQty = Math.ceil(totalLF * studMultiplier * multipliers.framing.twenty_percent_waste.value);
     if (studQty > 0) {
         items.push({
             qty: studQty,
             uom: 'EA',
             sku: studSku,
-            description: `${wallSize} Studs - ${name}`,
-            group: name,
-            is_dynamic_sku: false
+            description: `${wallSize} Studs — ${name}`,
+            group: name === 'Basement' ? 'Basement' : name.includes('1st') ? '1st Walls' : '2nd Walls',
+            is_dynamic_sku: false,
         });
     }
 
-    // Plates
-    const totalPlateLF = totalLF;
+    // ── Plates ───────────────────────────────────────────────────────────────────
+    const group = name === 'Basement' ? 'Basement' : name.includes('1st') ? '1st Walls' : '2nd Walls';
+
     if (plateType === 'Treated') {
-        const treatedQty = Math.ceil(totalPlateLF / 14 / 3);
-        if (treatedQty > 0) {
-            items.push({
-                qty: treatedQty,
-                uom: 'EA',
-                sku: 'treatplate14',
-                description: `Treated Plate 2x${wallSize === '2x4' ? '4' : '6'} 14ft - ${name}`,
-                group: name,
-                is_dynamic_sku: false
-            });
-        }
+        const qty = Math.ceil(totalLF / 14 / 3);
+        if (qty > 0) items.push({ qty, uom: 'EA', sku: 'treatplate14', description: `Treated Plate — ${name}`, group, is_dynamic_sku: false });
     } else {
-        const tsQty = Math.ceil(totalPlateLF / 16);
-        if (tsQty > 0) {
-            items.push({
-                qty: tsQty,
-                uom: 'EA',
-                sku: 'tmbrstnd116',
-                description: `Timberstrand Plate 16ft - ${name}`,
-                group: name,
-                is_dynamic_sku: false
-            });
-        }
+        const qty = Math.ceil(totalLF / 16);
+        if (qty > 0) items.push({ qty, uom: 'EA', sku: 'tmbrstnd116', description: `Timberstrand Plate 16ft — ${name}`, group, is_dynamic_sku: false });
     }
 
-    // Triple Plate
+    // ── Triple plate ─────────────────────────────────────────────────────────────
     if (triplePlate) {
-        const tripleQty = Math.ceil(totalPlateLF * multipliers.framing.triple_plate_factor.value / 16);
-        if (tripleQty > 0) {
-            items.push({
-                qty: tripleQty,
-                uom: 'EA',
-                sku: 'tmbrstnd116',
-                description: `Triple Plate - ${name}`,
-                group: name,
-                is_dynamic_sku: false
-            });
-        }
+        const qty = Math.ceil(totalLF * multipliers.framing.triple_plate_factor.value / 16);
+        if (qty > 0) items.push({ qty, uom: 'EA', sku: 'tmbrstnd116', description: `Triple Plate — ${name}`, group, is_dynamic_sku: false });
     }
 
-    // Rim Board (for floor sections only - non-basement)
+    // ── Rim board (non-basement floor sections only) ──────────────────────────────
     if (!isBasement) {
-        const perimeterLF = section.ext2x4_8ft + section.ext2x4_9ft + section.ext2x4_10ft +
+        const perimLF =
+            section.ext2x4_8ft + section.ext2x4_9ft + section.ext2x4_10ft +
             section.ext2x6_8ft + section.ext2x6_9ft + section.ext2x6_10ft;
-        if (perimeterLF > 0) {
-            const rimQty = Math.ceil(perimeterLF * multipliers.framing.rim_multiplier.value);
-            if (rimQty > 0) {
-                items.push({
-                    qty: rimQty,
-                    uom: 'EA',
-                    sku: 'rimboard',
-                    description: `Rim Board - ${name}`,
-                    group: name,
-                    is_dynamic_sku: false
-                });
-            }
+        if (perimLF > 0) {
+            const qty = Math.ceil(perimLF * multipliers.framing.rim_multiplier.value);
+            if (qty > 0) items.push({ qty, uom: 'EA', sku: 'rimboard', description: `Rim Board — ${name}`, group, is_dynamic_sku: false });
         }
     }
 
-    // Engineered Headers
-    if (section.headers && section.headers.length > 0) {
-        for (const h of section.headers) {
-            if (h.count <= 0) continue;
-            // Default to 12ft LVL if engineeredLumber not available
-            const sku = engineeredLumber ? getLVLCode(h.size, 12, engineeredLumber) : `HDR-${h.size}`;
-            items.push({
-                qty: h.count,
-                uom: 'EA',
-                sku,
-                description: `${h.size} Engineered Header - ${name}`,
-                group: name,
-                is_dynamic_sku: true,
-                tally: `${h.count}/${12}ft`
-            });
+    // ── Sill seal (basement exterior perimeter) ──────────────────────────────────
+    if (isBasement) {
+        const extPerimLF =
+            section.ext2x4_8ft + section.ext2x4_9ft + section.ext2x4_10ft +
+            section.ext2x6_8ft + section.ext2x6_9ft + section.ext2x6_10ft;
+        if (extPerimLF > 0) {
+            const lf_per_roll = multipliers.moisture_barrier?.sill_seal_roll_lf?.value ?? 50;
+            const qty = Math.ceil(extPerimLF / lf_per_roll);
+            if (qty > 0) items.push({ qty, uom: 'RL', sku: 'sillseal50', description: 'Sill Seal — Basement', group: 'Basement', is_dynamic_sku: false });
         }
     }
 
-    // Tyvek/Moisture Barrier (for non-basement exterior walls)
+    // ── Tyvek / house wrap (non-basement exterior walls) ─────────────────────────
     if (!isBasement && inputs.materials.tyvekType !== 'N/A' && inputs.materials.tyvekType !== 'Tape Only') {
-        const extWallSF = (section.ext2x4_8ft + section.ext2x6_8ft) * 8 +
+        const extWallSF =
+            (section.ext2x4_8ft + section.ext2x6_8ft) * 8 +
             (section.ext2x4_9ft + section.ext2x6_9ft) * 9 +
             (section.ext2x4_10ft + section.ext2x6_10ft) * 10;
 
         if (extWallSF > 0) {
+            // Check customer-specific Tyvek override
+            const custOverride = customerOverrides?.tyvek_overrides?.find(
+                (o: any) => o.customer_name === inputs.setup.customerName
+            );
+
             if (inputs.materials.tyvekType === 'Standard 9ft') {
-                const rolls = Math.ceil(extWallSF * multipliers.moisture_barrier.tyvek_9ft.value);
-                if (rolls > 0) {
-                    items.push({
-                        qty: rolls,
-                        uom: 'RL',
-                        sku: 'tyvek9ft150',
-                        description: `Tyvek 9ft House Wrap Roll - ${name}`,
-                        group: name,
-                        is_dynamic_sku: false
-                    });
-                }
+                const sku = custOverride?.force_height === '9ft' && custOverride?.tyvek_code
+                    ? custOverride.tyvek_code
+                    : 'tyvek9ft150';
+                const qty = Math.ceil(extWallSF * multipliers.moisture_barrier.tyvek_9ft.value);
+                if (qty > 0) items.push({ qty, uom: 'RL', sku, description: `Tyvek 9ft House Wrap — ${name}`, group, is_dynamic_sku: false });
             } else if (inputs.materials.tyvekType === 'Standard 10ft') {
-                const rolls = Math.ceil(extWallSF * multipliers.moisture_barrier.tyvek_10ft.value);
-                if (rolls > 0) {
-                    items.push({
-                        qty: rolls,
-                        uom: 'RL',
-                        sku: 'tyvek10ft150',
-                        description: `Tyvek 10ft House Wrap Roll - ${name}`,
-                        group: name,
-                        is_dynamic_sku: false
-                    });
+                let sku = 'tyvek10ft150';
+                if (custOverride) {
+                    if (custOverride.force_height === '9ft' && custOverride.tyvek_code) sku = custOverride.tyvek_code;
+                    else if (custOverride.force_height === 'auto' && custOverride.tyvek_code_10) sku = custOverride.tyvek_code_10;
                 }
+                const qty = Math.ceil(extWallSF * multipliers.moisture_barrier.tyvek_10ft.value);
+                if (qty > 0) items.push({ qty, uom: 'RL', sku, description: `Tyvek 10ft House Wrap — ${name}`, group, is_dynamic_sku: false });
             } else if (inputs.materials.tyvekType === 'Zip Panels') {
-                const panels = Math.ceil(extWallSF / 32);
-                if (panels > 0) {
-                    items.push({
-                        qty: panels,
-                        uom: 'EA',
-                        sku: 'zippanel48',
-                        description: `Zip System Panel - ${name}`,
-                        group: name,
-                        is_dynamic_sku: false
-                    });
-                }
+                const qty = Math.ceil(extWallSF / 32);
+                if (qty > 0) items.push({ qty, uom: 'EA', sku: 'zippanel48', description: `Zip System Panel — ${name}`, group, is_dynamic_sku: false });
             }
+        }
+    }
+
+    // ── Engineered headers ────────────────────────────────────────────────────────
+    if (section.headers?.length) {
+        for (const h of section.headers) {
+            if (h.count <= 0) continue;
+            const length_ft = (h as any).length_ft ?? 12;
+            const sku = engineeredLumber ? getLVLCode(h.size, length_ft, engineeredLumber) : `HDR-${h.size}-${length_ft}`;
+            items.push({
+                qty: h.count,
+                uom: 'EA',
+                sku,
+                description: `${h.size} × ${length_ft}ft Engineered Header — ${name}`,
+                group,
+                is_dynamic_sku: true,
+                tally: `${h.count}/${length_ft}ft`,
+            });
         }
     }
 
