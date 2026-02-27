@@ -4,18 +4,24 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply text-slate-100 antialiased;
+    background: radial-gradient(circle at top, #1e293b 0%, #0f172a 45%, #020617 100%);
+    min-height: 100vh;
   }
 }
 
 .card {
-  @apply bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden;
+  @apply rounded-2xl border border-white/15 bg-slate-900/70 shadow-xl shadow-slate-950/30 backdrop-blur overflow-hidden;
 }
 
 .input-label {
-  @apply block text-sm font-medium text-slate-700 mb-1;
+  @apply block text-sm font-medium text-slate-200 mb-1;
 }
 
 .input-field {
-  @apply block w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm;
+  @apply block w-full rounded-lg border border-slate-700 bg-slate-950/60 text-slate-100 shadow-sm focus:border-cyan-400 focus:ring-cyan-400 sm:text-sm;
+}
+
+select.input-field option {
+  @apply bg-slate-900 text-slate-100;
 }
