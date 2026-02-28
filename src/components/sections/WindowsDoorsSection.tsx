@@ -58,7 +58,7 @@ export function WindowsDoorsSectionComp({ data, onChange }: Props) {
     };
 
     return (
-        <SectionCard title="12. Windows & Doors (Package)">
+        <SectionCard title="12. Windows & Doors (Package)" accent="sky">
             <div className="space-y-5">
                 {/* Windows */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

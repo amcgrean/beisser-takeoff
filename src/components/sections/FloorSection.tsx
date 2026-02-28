@@ -1,6 +1,6 @@
 import React from 'react';
 import { FloorSection, HeaderEntry } from '../../types/estimate';
-import { SectionCard, InputGroup } from '../ui/SectionCard';
+import { SectionCard, InputGroup, SubSection } from '../ui/SectionCard';
 
 interface Props {
     sectionNumber: number;
@@ -34,73 +34,80 @@ export function FloorSectionComp({ sectionNumber, title, data, onChange }: Props
     const removeHeader = (i: number) => onChange({ ...data, headers: data.headers.filter((_, idx) => idx !== i) });
 
     return (
-        <SectionCard title={`${sectionNumber}. ${title}`}>
-            <div className="space-y-5">
-                {/* Deck */}
-                <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Deck</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <InputGroup label="Deck SF">
-                            <input type="number" name="deckSF" value={data.deckSF || ''} onChange={handleChange} className="input-field" min="0" />
-                        </InputGroup>
-                        <InputGroup label="Deck Type">
-                            <select name="deckType" value={data.deckType} onChange={handleChange} className="input-field">
-                                {DECK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        <SectionCard title={`${sectionNumber}. ${title}`} accent="violet">
+            {/* Deck */}
+            <SubSection title="Deck / Subfloor">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <InputGroup label="Deck SF">
+                        <input type="number" name="deckSF" value={data.deckSF || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                    <InputGroup label="Deck Type">
+                        <select name="deckType" value={data.deckType} onChange={handleChange} className="input-field">
+                            {DECK_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="TJI Size">
+                        <select name="tjiSize" value={data.tjiSize} onChange={handleChange} className="input-field">
+                            {TJI_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+                        </select>
+                    </InputGroup>
+                    <InputGroup label="TJI Count">
+                        <input type="number" name="tjiCount" value={data.tjiCount || ''} onChange={handleChange} className="input-field" min="0" placeholder="Qty" />
+                    </InputGroup>
+                </div>
+            </SubSection>
+
+            {/* Exterior Walls */}
+            <SubSection title="Exterior Walls (LF by height)">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <InputGroup label="2x4 @ 8ft"><input type="number" name="ext2x4_8ft"  value={data.ext2x4_8ft  || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                    <InputGroup label="2x4 @ 9ft"><input type="number" name="ext2x4_9ft"  value={data.ext2x4_9ft  || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                    <InputGroup label="2x4 @ 10ft"><input type="number" name="ext2x4_10ft" value={data.ext2x4_10ft || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                    <InputGroup label="2x6 @ 8ft"><input type="number" name="ext2x6_8ft"  value={data.ext2x6_8ft  || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                    <InputGroup label="2x6 @ 9ft"><input type="number" name="ext2x6_9ft"  value={data.ext2x6_9ft  || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                    <InputGroup label="2x6 @ 10ft"><input type="number" name="ext2x6_10ft" value={data.ext2x6_10ft || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
+                </div>
+            </SubSection>
+
+            {/* Interior & Structural */}
+            <SubSection title="Interior & Structural">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <InputGroup label="Int Wall LF">
+                        <input type="number" name="intWallLF" value={data.intWallLF || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                    <InputGroup label="Garage Wall LF">
+                        <input type="number" name="garageWallLF" value={data.garageWallLF || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                    <InputGroup label="Beam LF">
+                        <input type="number" name="beamLF" value={data.beamLF || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                    <InputGroup label="Stair Count">
+                        <input type="number" name="stairCount" value={data.stairCount || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                </div>
+            </SubSection>
+
+            {/* Engineered Headers */}
+            <SubSection title="Engineered Headers">
+                <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-slate-500">{data.headers.length === 0 ? 'No headers added' : `${data.headers.length} header${data.headers.length !== 1 ? 's' : ''}`}</span>
+                    <button onClick={addHeader} className="text-xs px-3 py-1 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25 transition">+ Add Header</button>
+                </div>
+                <div className="space-y-2">
+                    {data.headers.map((h, i) => (
+                        <div key={i} className="flex gap-2 items-center">
+                            <select value={h.size} onChange={e => handleHeader(i, 'size', e.target.value)} className="input-field flex-1 min-w-[130px]">
+                                {HEADER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
-                        </InputGroup>
-                        <InputGroup label="TJI / I-Joist Size">
-                            <select name="tjiSize" value={data.tjiSize} onChange={handleChange} className="input-field">
-                                {TJI_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
+                            <select value={h.length_ft} onChange={e => handleHeader(i, 'length_ft', e.target.value)} className="input-field w-24">
+                                {lengthsFor(h.size).map(l => <option key={l} value={l}>{l}ft</option>)}
                             </select>
-                        </InputGroup>
-                        <InputGroup label="TJI / I-Joist Count">
-                            <input type="number" name="tjiCount" value={data.tjiCount || ''} onChange={handleChange} className="input-field" min="0" placeholder="Enter joist count" />
-                        </InputGroup>
-                    </div>
+                            <input type="number" value={h.count || ''} onChange={e => handleHeader(i, 'count', e.target.value)} className="input-field w-20" placeholder="Qty" min="0" />
+                            <button onClick={() => removeHeader(i)} className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition flex-shrink-0">×</button>
+                        </div>
+                    ))}
                 </div>
-
-                {/* Exterior walls */}
-                <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Exterior Walls (LF by height)</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {(['ext2x4_8ft','ext2x4_9ft','ext2x4_10ft','ext2x6_8ft','ext2x6_9ft','ext2x6_10ft'] as const).map(f => (
-                            <InputGroup key={f} label={f.replace('ext','').replace('_',' @ ').replace('ft','ft').replace('2x4',' 2x4').replace('2x6',' 2x6').trim()}>
-                                <input type="number" name={f} value={(data as any)[f] || ''} onChange={handleChange} className="input-field" min="0" />
-                            </InputGroup>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <InputGroup label="Int Wall LF">    <input type="number" name="intWallLF"    value={data.intWallLF    || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
-                    <InputGroup label="Garage Wall LF"> <input type="number" name="garageWallLF" value={data.garageWallLF || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
-                    <InputGroup label="Beam LF">        <input type="number" name="beamLF"       value={data.beamLF       || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
-                    <InputGroup label="Stair Count">    <input type="number" name="stairCount"   value={data.stairCount   || ''} onChange={handleChange} className="input-field" min="0" /></InputGroup>
-                </div>
-
-                {/* Engineered Headers */}
-                <div>
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-slate-300">Engineered Headers</h3>
-                        <button onClick={addHeader} className="text-xs px-3 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition">+ Add Header</button>
-                    </div>
-                    {data.headers.length === 0 && <p className="text-xs text-slate-500 italic">No headers added.</p>}
-                    <div className="space-y-2">
-                        {data.headers.map((h, i) => (
-                            <div key={i} className="flex gap-2 items-center flex-wrap">
-                                <select value={h.size} onChange={e => handleHeader(i, 'size', e.target.value)} className="input-field flex-1 min-w-[130px]">
-                                    {HEADER_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                <select value={h.length_ft} onChange={e => handleHeader(i, 'length_ft', e.target.value)} className="input-field w-24">
-                                    {lengthsFor(h.size).map(l => <option key={l} value={l}>{l}ft</option>)}
-                                </select>
-                                <input type="number" value={h.count || ''} onChange={e => handleHeader(i, 'count', e.target.value)} className="input-field w-20" placeholder="Qty" min="0" />
-                                <button onClick={() => removeHeader(i)} className="text-slate-500 hover:text-red-400 text-lg leading-none">×</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+            </SubSection>
         </SectionCard>
     );
 }

@@ -35,6 +35,7 @@ export interface WallSection {
 
 export interface BasementSection extends WallSection {
     fhaCeilingHeight: number;  // ft — drives FHA post height/SKU
+    fhaPostCount: number;      // user-entered count of FHA adjustable posts
     stoopJoistSize: string;    // '2x8' | '2x10' | '2x12'
     stoopSF: number;           // stoop square footage → joist qty + treated plywood
 }

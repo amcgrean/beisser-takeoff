@@ -42,7 +42,7 @@ export function ExteriorDeckSectionComp({ data, onChange }: Props) {
     );
 
     return (
-        <SectionCard title="11. Exterior Deck">
+        <SectionCard title="11. Exterior Deck" accent="amber">
             <div className="space-y-6">
                 {/* Structure */}
                 <div>

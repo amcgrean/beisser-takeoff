@@ -33,12 +33,11 @@ function stairItems(stairCount: number, group: string): LineItem[] {
 }
 
 // ── FHA post helper (basement beam support columns) ───────────────────────────
-// Post count = ceil(beamLF / 8); height SKU derived from FHA ceiling height
-function fhaPostItems(beamLF: number, fhaCeilingHeight: number): LineItem[] {
-    if (beamLF <= 0 || fhaCeilingHeight <= 0) return [];
-    const postCount = Math.ceil(beamLF / 8);
-    const heightFt  = Math.ceil(fhaCeilingHeight);
-    const sku       = `fhapost${String(heightFt).padStart(2, '0')}`;
+// postCount is user-entered; height SKU derived from FHA ceiling height
+function fhaPostItems(postCount: number, fhaCeilingHeight: number): LineItem[] {
+    if (postCount <= 0 || fhaCeilingHeight <= 0) return [];
+    const heightFt = Math.ceil(fhaCeilingHeight);
+    const sku      = `fhapost${String(heightFt).padStart(2, '0')}`;
     return [{
         qty: postCount,
         uom: 'EA',
@@ -226,7 +225,7 @@ export function calculateFraming(
     // ── Basement-only: FHA posts + stoop ─────────────────────────────────────
     if (isBasement) {
         const bsmt = section as BasementSection;
-        items.push(...fhaPostItems(bsmt.beamLF, bsmt.fhaCeilingHeight));
+        items.push(...fhaPostItems(bsmt.fhaPostCount ?? 0, bsmt.fhaCeilingHeight));
         items.push(...stoopItems(bsmt.stoopSF ?? 0, bsmt.stoopJoistSize, engineeredLumber));
     }
 
