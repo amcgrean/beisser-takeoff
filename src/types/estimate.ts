@@ -16,7 +16,7 @@ export interface MaterialSelections {
 
 export interface HeaderEntry {
     size: string;       // e.g. '1.75x9.5', '2x10'
-    length_ft: number;  // e.g. 12 — used to build LVL item code
+    length_ft: number;  // used to build LVL item code
     count: number;
 }
 
@@ -34,14 +34,16 @@ export interface WallSection {
 }
 
 export interface BasementSection extends WallSection {
-    fhaCeilingHeight: number;
-    stoopJoistSize: string;
+    fhaCeilingHeight: number;  // ft — drives FHA post height/SKU
+    stoopJoistSize: string;    // '2x8' | '2x10' | '2x12'
+    stoopSF: number;           // stoop square footage → joist qty + treated plywood
 }
 
 export interface FloorSection extends WallSection {
     deckSF: number;
     deckType: 'Edge T&G' | 'Gold Edge' | 'Advantech' | 'Diamond';
     tjiSize: string;
+    tjiCount: number;   // user-entered count of I-joists
     garageWallLF: number;
 }
 
@@ -120,7 +122,7 @@ export interface ExteriorDeckSection {
     landing: boolean;
 }
 
-// Door entry for the Windows & Doors section — resolves to door_styles.json SKU
+// Door entry for Windows & Doors section — resolves to door_styles.json SKU
 export interface DoorEntry {
     style: string;      // 'Madison' | 'Cambridge' | 'Continental' | 'Craftsman'
     sizeKey: string;    // e.g. 'slab.28', 'bi.40', 'dh.50', 'sh.30'
@@ -155,7 +157,6 @@ export interface LineItem {
     warning?: string;
 }
 
-// Data Lookup Interfaces
 export interface Multipliers {
     framing: {
         stud_multiplier_basement: { value: number };
@@ -189,9 +190,7 @@ export interface Branch {
 }
 
 export interface HardwareMatrix {
-    [finish: string]: {
-        [func: string]: string | null;
-    };
+    [finish: string]: { [func: string]: string | null };
 }
 
 export interface HardwareLookup {

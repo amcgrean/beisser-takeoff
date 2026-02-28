@@ -52,6 +52,9 @@ export function BasementSectionComp({ data, onChange }: Props) {
                         {JOIST_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                 </InputGroup>
+                <InputGroup label="Stoop SF">
+                    <input type="number" name="stoopSF" value={data.stoopSF || ''} onChange={handleChange} className="input-field" min="0" placeholder="Stoop square footage" />
+                </InputGroup>
             </div>
 
             {/* Engineered Headers */}

@@ -53,6 +53,9 @@ export function FloorSectionComp({ sectionNumber, title, data, onChange }: Props
                                 {TJI_SIZES.map(s => <option key={s} value={s}>{s}"</option>)}
                             </select>
                         </InputGroup>
+                        <InputGroup label="TJI / I-Joist Count">
+                            <input type="number" name="tjiCount" value={data.tjiCount || ''} onChange={handleChange} className="input-field" min="0" placeholder="Enter joist count" />
+                        </InputGroup>
                     </div>
                 </div>
 
