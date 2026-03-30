@@ -75,21 +75,24 @@ See `src/lib/takeoff/presets.ts` for all 49 standard presets and `bidset.pdf` fo
 - Auth: `import { auth } from '<relative>/auth'` pattern
 - DB: `import { getDb, schema } from '<relative>/db/index'` pattern
 
-## Phase 2 TODO
-Priority items for the next session:
+## Phase 2 Progress
 
-1. **Drizzle migration** — Run `npx drizzle-kit generate` to create migration SQL for the 7 new tables, then push to DB
-2. **Live drawing previews** — Show rubber-band lines while drawing polylines/polygons (currently no visual feedback until completion)
-3. **Hover tooltips** — 300ms delay tooltip showing group name + value when hovering canvas objects
-4. **Cloud markup tool** — The cloud/irregular highlight annotation tool is defined in ToolType but not implemented
-5. **PDF file storage** — Currently PDFs are loaded client-side only per session. Need server upload (Vercel Blob or similar) so PDFs persist across sessions
-6. **Annotated PDF export refinement** — Current export renders PDF pages but doesn't composite Fabric.js annotations on top. Need headless Fabric canvas rendering
-7. **Integration testing** — Test full workflow with bidset.pdf: upload, create viewports, calibrate, measure walls/areas, send to estimate
+### Completed
+1. **Drizzle migration** — Migration SQL written (`db/migrations/0001_add_takeoff_tables.sql`) for all 7 new tables (assemblies, assembly_items, takeoff_sessions, takeoff_viewports, takeoff_groups, takeoff_measurements, takeoff_page_states). Run `npx drizzle-kit push` to deploy to Neon.
+2. **Live drawing previews** — Rubber-band dashed lines now show from the last placed point to cursor during polyline/polygon drawing. Confirmed segments render as solid lines immediately on click. All preview objects cleaned up on completion or Escape.
+3. **Hover tooltips** — 300ms delayed tooltip showing group name + measurement value when hovering canvas objects. Positioned near cursor, auto-clears on mouse out.
+4. **Cloud markup tool** — Scalloped rectangle annotation tool fully implemented. Uses SVG arc paths along all four edges with 16px scallop radius. Two-click drawing (opposite corners). Available in toolbar.
+5. **Annotated PDF export refinement** — Export now composites Fabric.js annotations on top of PDF pages using a headless Fabric canvas. Creates transparent PNG overlays from saved page state JSON.
+6. **PDF file storage** — Cloudflare R2 integration via S3-compatible API. PDFs auto-upload on file select, auto-load from R2 when reopening sessions. Upload endpoint at `api/takeoff/sessions/[sessionId]/upload`, download at `api/takeoff/sessions/[sessionId]/pdf`. R2 client in `src/lib/r2.ts`. Env vars: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
+
+### Remaining TODO
+1. **Integration testing** — Test full workflow with bidset.pdf: upload, create viewports, calibrate, measure walls/areas, send to estimate
 
 ## Tech Stack
 - Next.js 15.1 (App Router), React 19, TypeScript 5.7
 - Tailwind CSS 3.4 (dark theme, cyan accent: brand.400/500/600)
 - Drizzle ORM + Neon Postgres (serverless)
+- Cloudflare R2 (PDF storage via @aws-sdk/client-s3)
 - NextAuth v5 beta (credentials provider, JWT strategy)
 - pdfjs-dist 5.6, fabric 6.x, jspdf 2.x
 - Lucide React icons, papaparse, zod, date-fns

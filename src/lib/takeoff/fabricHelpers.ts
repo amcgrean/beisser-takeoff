@@ -509,6 +509,80 @@ export function createArrowAnnotation(
   } as Record<string, unknown>);
 }
 
+/**
+ * Create a cloud/scallop annotation shape.
+ * Draws a rectangle with scalloped (bumpy) edges — common in construction markup.
+ */
+export function createCloudAnnotation(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+  id: string
+): Group {
+  const left = Math.min(x1, x2);
+  const top = Math.min(y1, y2);
+  const width = Math.abs(x2 - x1);
+  const height = Math.abs(y2 - y1);
+
+  // Generate scalloped path
+  const scallop = 16; // arc radius
+  const path: string[] = [];
+
+  // Start at top-left
+  path.push(`M ${left} ${top}`);
+
+  // Top edge (left to right)
+  const topArcs = Math.max(1, Math.round(width / (scallop * 2)));
+  const topStep = width / topArcs;
+  for (let i = 0; i < topArcs; i++) {
+    const ex = left + (i + 1) * topStep;
+    path.push(`A ${topStep / 2} ${scallop} 0 0 1 ${ex} ${top}`);
+  }
+
+  // Right edge (top to bottom)
+  const rightArcs = Math.max(1, Math.round(height / (scallop * 2)));
+  const rightStep = height / rightArcs;
+  for (let i = 0; i < rightArcs; i++) {
+    const ey = top + (i + 1) * rightStep;
+    path.push(`A ${scallop} ${rightStep / 2} 0 0 1 ${left + width} ${ey}`);
+  }
+
+  // Bottom edge (right to left)
+  for (let i = topArcs - 1; i >= 0; i--) {
+    const ex = left + i * topStep;
+    path.push(`A ${topStep / 2} ${scallop} 0 0 1 ${ex} ${top + height}`);
+  }
+
+  // Left edge (bottom to top)
+  for (let i = rightArcs - 1; i >= 0; i--) {
+    const ey = top + i * rightStep;
+    path.push(`A ${scallop} ${rightStep / 2} 0 0 1 ${left} ${ey}`);
+  }
+
+  path.push('Z');
+
+  const cloudPath = new Path(path.join(' '), {
+    fill: `${color}10`,
+    stroke: color,
+    strokeWidth: 2,
+    selectable: false,
+    evented: false,
+  });
+
+  const group = new Group([cloudPath], {
+    selectable: true,
+    evented: true,
+    hasControls: true,
+    hoverCursor: 'pointer',
+    id: `annotation-${id}`,
+    measurementType: 'annotation',
+  } as Record<string, unknown>);
+
+  return group;
+}
+
 // Re-export fabric types that components will need
 export type { Canvas, TPointerEvent, TPointerEventInfo };
 export { Rect, Circle, Line, Text, Path, Group, FabricPolyline, FabricPolygon, PencilBrush };

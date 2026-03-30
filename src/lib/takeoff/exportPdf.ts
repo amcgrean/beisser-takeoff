@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { Canvas as FabricCanvas } from 'fabric';
 
 /**
  * Export an annotated PDF with Fabric.js overlays rendered on top of each page.
@@ -21,6 +22,8 @@ export async function exportAnnotatedPdf(
     format: [viewport.width, viewport.height],
   });
 
+  const renderScale = 1.5; // Match TakeoffCanvas render scale
+
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     if (pageNum > 1) {
       const page = await pdf.getPage(pageNum);
@@ -30,24 +33,69 @@ export async function exportAnnotatedPdf(
 
     // Render PDF page to a temporary canvas
     const page = await pdf.getPage(pageNum);
-    const pv = page.getViewport({ scale: 1.5 }); // Higher resolution for print
-    const canvas = document.createElement('canvas');
-    canvas.width = pv.width;
-    canvas.height = pv.height;
-    const ctx = canvas.getContext('2d');
+    const pv = page.getViewport({ scale: renderScale });
+    const pdfCanvas = document.createElement('canvas');
+    pdfCanvas.width = pv.width;
+    pdfCanvas.height = pv.height;
+    const ctx = pdfCanvas.getContext('2d');
     if (!ctx) continue;
 
-    await page.render({ canvasContext: ctx, canvas, viewport: pv }).promise;
+    await page.render({ canvasContext: ctx, canvas: pdfCanvas, viewport: pv }).promise;
 
-    // Add PDF page as image
-    const imgData = canvas.toDataURL('image/jpeg', 0.85);
+    // Add PDF page as base image
     const pageViewport = page.getViewport({ scale: 1 });
-    doc.addImage(imgData, 'JPEG', 0, 0, pageViewport.width, pageViewport.height);
+    const pdfImgData = pdfCanvas.toDataURL('image/jpeg', 0.85);
+    doc.addImage(pdfImgData, 'JPEG', 0, 0, pageViewport.width, pageViewport.height);
 
-    // If there's a Fabric state for this page, render it on top
-    // (This is a simplified overlay — full Fabric rendering would need a headless Fabric canvas)
-    // For now, the page image includes the base PDF; annotations are embedded in page state
+    // Composite Fabric.js annotations on top if page state exists
+    const fabricState = pageStates[pageNum];
+    if (fabricState && typeof fabricState === 'object') {
+      try {
+        const annotationImg = await renderFabricStateToImage(fabricState, pv.width, pv.height);
+        if (annotationImg) {
+          doc.addImage(annotationImg, 'PNG', 0, 0, pageViewport.width, pageViewport.height);
+        }
+      } catch (err) {
+        console.warn(`Failed to render annotations for page ${pageNum}:`, err);
+      }
+    }
   }
 
   doc.save(`${sessionName || 'takeoff'}-annotated.pdf`);
+}
+
+/**
+ * Render a saved Fabric.js canvas state to a transparent PNG data URL.
+ * Creates a temporary off-screen Fabric canvas, loads the state, and exports.
+ */
+async function renderFabricStateToImage(
+  fabricJson: unknown,
+  width: number,
+  height: number
+): Promise<string | null> {
+  // Create an off-screen canvas element
+  const canvasEl = document.createElement('canvas');
+  canvasEl.width = width;
+  canvasEl.height = height;
+
+  const tempCanvas = new FabricCanvas(canvasEl, {
+    width,
+    height,
+    renderOnAddRemove: false,
+  });
+
+  try {
+    await tempCanvas.loadFromJSON(fabricJson);
+    tempCanvas.renderAll();
+
+    // Export as transparent PNG
+    const dataUrl = tempCanvas.toDataURL({
+      format: 'png',
+      multiplier: 1,
+    });
+
+    return dataUrl;
+  } finally {
+    tempCanvas.dispose();
+  }
 }

@@ -8,6 +8,13 @@
       "when": 1772328455293,
       "tag": "0000_large_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774972800000,
+      "tag": "0001_add_takeoff_tables",
+      "breakpoints": true
     }
   ]
 }
