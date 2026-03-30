@@ -333,6 +333,7 @@ export function TakeoffWorkspace({ sessionId }: Props) {
               scrollMode={scrollMode}
               onObjectSelect={handleObjectSelect}
               onCalibrationComplete={handleCalibrationComplete}
+              onPdfLoaded={(pdf) => setPdfDoc(pdf)}
             />
 
             {/* Inspector panel (absolute overlay) */}

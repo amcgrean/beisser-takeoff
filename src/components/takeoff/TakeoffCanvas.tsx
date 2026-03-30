@@ -37,6 +37,7 @@ interface TakeoffCanvasProps {
   scrollMode: 'zoom' | 'pan';
   onObjectSelect: (objectId: string | null) => void;
   onCalibrationComplete: (viewportId: string, pixelsPerUnit: number) => void;
+  onPdfLoaded?: (pdf: PDFDocumentProxy) => void;
 }
 
 export function TakeoffCanvas({
@@ -47,6 +48,7 @@ export function TakeoffCanvas({
   scrollMode,
   onObjectSelect,
   onCalibrationComplete,
+  onPdfLoaded,
 }: TakeoffCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,6 +73,11 @@ export function TakeoffCanvas({
   const isPanningRef = useRef(false);
   const lastPanPointRef = useRef<{ x: number; y: number } | null>(null);
   const spaceHeldRef = useRef(false);
+
+  // Stable refs used by the ResizeObserver (avoids effect re-registration on page change)
+  const prevPageRef = useRef<number>(state.currentPage);
+  const currentPageRef = useRef<number>(state.currentPage);
+  const renderCurrentPageRef = useRef<(pageNum: number) => void>(() => {});
 
   // ── Initialize Fabric canvas ──
   useEffect(() => {
@@ -107,6 +114,7 @@ export function TakeoffCanvas({
         const pdf = await loadPdf(pdfData!);
         if (cancelled) return;
         pdfDocRef.current = pdf;
+        onPdfLoaded?.(pdf);
         dispatch({ type: 'INIT_SESSION', payload: { ...getSessionPayload(state), pageCount: pdf.numPages } });
         // Render first page
         await renderCurrentPage(1);
@@ -175,14 +183,19 @@ export function TakeoffCanvas({
     }
   }, [state.pageStates, state.viewports, state.activeViewportId]);
 
+  // Keep stable refs in sync so ResizeObserver never needs re-registration
+  useEffect(() => { renderCurrentPageRef.current = renderCurrentPage; }, [renderCurrentPage]);
+  useEffect(() => { currentPageRef.current = state.currentPage; }, [state.currentPage]);
+
   // ── Page navigation ──
   useEffect(() => {
     const fabricCanvas = fabricInstanceRef.current;
     if (!fabricCanvas || !pdfDocRef.current) return;
 
-    // Save current page state before navigating
+    // Save the PREVIOUS page's Fabric state before switching
     const currentFabricJson = serializeCanvas(fabricCanvas);
-    dispatch({ type: 'SET_PAGE_STATE', payload: { pageNumber: state.currentPage, fabricJson: currentFabricJson } });
+    dispatch({ type: 'SET_PAGE_STATE', payload: { pageNumber: prevPageRef.current, fabricJson: currentFabricJson } });
+    prevPageRef.current = state.currentPage;
 
     // Clear and render new page
     clearCanvas(fabricCanvas);
@@ -774,6 +787,8 @@ export function TakeoffCanvas({
   }
 
   // ── ResizeObserver ──
+  // Uses stable refs so the observer is registered once and never re-registers on page
+  // change (which would fire an immediate callback and cancel the in-progress render).
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -782,8 +797,7 @@ export function TakeoffCanvas({
     const observer = new ResizeObserver(() => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        // On resize, re-render current page
-        renderCurrentPage(state.currentPage);
+        renderCurrentPageRef.current(currentPageRef.current);
       }, 200);
     });
 
@@ -792,7 +806,8 @@ export function TakeoffCanvas({
       observer.disconnect();
       clearTimeout(debounceTimer);
     };
-  }, [state.currentPage, renderCurrentPage]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
