@@ -20,6 +20,8 @@ import {
   createTextAnnotation,
   createRectHighlight,
   createArrowAnnotation,
+  createCloudAnnotation,
+  Line,
   type Canvas,
 } from '@/lib/takeoff/fabricHelpers';
 import { calcPolylineLength, calcSegmentLengths, calcPolygonArea, formatMeasurement, pixelsPerUnitFromCalibration, calcPixelDistance } from '@/lib/takeoff/calculations';
@@ -50,11 +52,15 @@ export function TakeoffCanvas({
   const fabricInstanceRef = useRef<Canvas | null>(null);
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
   const [isRendering, setIsRendering] = useState(false);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Drawing state for polyline/polygon tools
   const drawingPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const isDrawingRef = useRef(false);
   const tempObjectsRef = useRef<string[]>([]); // IDs of temporary drawing objects
+  const previewLineRef = useRef<InstanceType<typeof Line> | null>(null);
+  const previewSegmentsRef = useRef<InstanceType<typeof Line>[]>([]);
 
   // Calibration state
   const calibrationPointsRef = useRef<Array<{ x: number; y: number }>>([]);
@@ -219,6 +225,19 @@ export function TakeoffCanvas({
         isDrawingRef.current = false;
         drawingPointsRef.current = [];
         calibrationPointsRef.current = [];
+        // Clean up preview lines
+        const fc = fabricInstanceRef.current;
+        if (fc) {
+          if (previewLineRef.current) {
+            fc.remove(previewLineRef.current);
+            previewLineRef.current = null;
+          }
+          for (const seg of previewSegmentsRef.current) {
+            fc.remove(seg);
+          }
+          previewSegmentsRef.current = [];
+          fc.renderAll();
+        }
         dispatch({ type: 'SET_TOOL', payload: 'select' });
       }
     }
@@ -267,6 +286,26 @@ export function TakeoffCanvas({
       if (tool === 'polyline' || tool === 'polygon') {
         drawingPointsRef.current.push({ x: pointer.x, y: pointer.y });
         isDrawingRef.current = true;
+
+        // Draw confirmed segment for points after the first
+        const pts = drawingPointsRef.current;
+        if (pts.length >= 2) {
+          const fc = fabricInstanceRef.current;
+          const activeGroup = state.groups.find((g) => g.id === state.activePresetId);
+          const color = activeGroup?.color ?? '#22d3ee';
+          if (fc) {
+            const prev = pts[pts.length - 2];
+            const curr = pts[pts.length - 1];
+            const seg = new Line([prev.x, prev.y, curr.x, curr.y], {
+              stroke: color,
+              strokeWidth: 2,
+              selectable: false,
+              evented: false,
+            });
+            fc.add(seg);
+            previewSegmentsRef.current.push(seg);
+          }
+        }
       } else if (tool === 'count' && state.activePresetId) {
         handleCountPlacement(pointer.x, pointer.y);
       } else if (tool === 'calibrate') {
@@ -286,6 +325,11 @@ export function TakeoffCanvas({
       } else if (tool === 'rectangle') {
         drawingPointsRef.current = [{ x: pointer.x, y: pointer.y }];
         isDrawingRef.current = true;
+      } else if (tool === 'cloud' && isDrawingRef.current && drawingPointsRef.current.length >= 1) {
+        handleCloudComplete(pointer.x, pointer.y);
+      } else if (tool === 'cloud') {
+        drawingPointsRef.current = [{ x: pointer.x, y: pointer.y }];
+        isDrawingRef.current = true;
       }
     }
 
@@ -296,6 +340,36 @@ export function TakeoffCanvas({
         const dy = opt.e.clientY - lastPanPointRef.current.y;
         panCanvas(fabricCanvas, dx, dy);
         lastPanPointRef.current = { x: opt.e.clientX, y: opt.e.clientY };
+      }
+
+      // Rubber-band preview for polyline/polygon
+      if (isDrawingRef.current && drawingPointsRef.current.length > 0) {
+        const tool = state.activeTool;
+        if (tool === 'polyline' || tool === 'polygon') {
+          const fc = fabricInstanceRef.current;
+          if (fc) {
+            if (previewLineRef.current) {
+              fc.remove(previewLineRef.current);
+            }
+            const lastPt = drawingPointsRef.current[drawingPointsRef.current.length - 1];
+            const activeGroup = state.groups.find((g) => g.id === state.activePresetId);
+            const color = activeGroup?.color ?? '#22d3ee';
+            const preview = new Line(
+              [lastPt.x, lastPt.y, opt.pointer.x, opt.pointer.y],
+              {
+                stroke: color,
+                strokeWidth: 2,
+                strokeDashArray: [6, 3],
+                selectable: false,
+                evented: false,
+                opacity: 0.6,
+              }
+            );
+            fc.add(preview);
+            fc.renderAll();
+            previewLineRef.current = preview;
+          }
+        }
       }
     }
 
@@ -331,20 +405,65 @@ export function TakeoffCanvas({
       }
     }
 
+    function handleMouseOver(opt: { e: MouseEvent; target?: unknown }) {
+      const target = opt.target as Record<string, unknown> | undefined;
+      if (!target) return;
+
+      const measId = target.measurementId as string | undefined;
+      const gId = target.groupId as string | undefined;
+      if (!measId || !gId) return;
+
+      // Clear any existing timer
+      if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+
+      tooltipTimerRef.current = setTimeout(() => {
+        const group = state.groups.find((g) => g.id === gId);
+        if (!group) return;
+
+        // Find the measurement value
+        const pageMeasurements = state.measurements[state.currentPage] ?? [];
+        const measurement = pageMeasurements.find((m) => m.id === measId);
+        const valueText = measurement ? `${measurement.label}` : '';
+
+        const container = containerRef.current;
+        if (!container) return;
+        const rect = container.getBoundingClientRect();
+
+        setTooltip({
+          x: opt.e.clientX - rect.left,
+          y: opt.e.clientY - rect.top - 40,
+          text: `${group.name}${valueText ? ': ' + valueText : ''}`,
+        });
+      }, 300);
+    }
+
+    function handleMouseOut() {
+      if (tooltipTimerRef.current) {
+        clearTimeout(tooltipTimerRef.current);
+        tooltipTimerRef.current = null;
+      }
+      setTooltip(null);
+    }
+
     // Register events
     fabricCanvas.on('mouse:down', handleMouseDown as unknown as (...args: unknown[]) => void);
     fabricCanvas.on('mouse:move', handleMouseMove as unknown as (...args: unknown[]) => void);
     fabricCanvas.on('mouse:up', handleMouseUp as unknown as (...args: unknown[]) => void);
     fabricCanvas.on('mouse:dblclick', handleDblClick as unknown as (...args: unknown[]) => void);
+    fabricCanvas.on('mouse:over', handleMouseOver as unknown as (...args: unknown[]) => void);
+    fabricCanvas.on('mouse:out', handleMouseOut as unknown as (...args: unknown[]) => void);
 
     return () => {
       fabricCanvas.off('mouse:down');
       fabricCanvas.off('mouse:move');
       fabricCanvas.off('mouse:up');
       fabricCanvas.off('mouse:dblclick');
+      fabricCanvas.off('mouse:over');
+      fabricCanvas.off('mouse:out');
+      if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.activeTool, state.activePresetId, state.activeViewportId, state.currentPage, state.viewports]);
+  }, [state.activeTool, state.activePresetId, state.activeViewportId, state.currentPage, state.viewports, state.groups, state.measurements]);
 
   // ── Freehand mode toggle ──
   useEffect(() => {
@@ -360,7 +479,21 @@ export function TakeoffCanvas({
 
   // ── Tool completion handlers ──
 
+  function cleanupPreview() {
+    const fabricCanvas = fabricInstanceRef.current;
+    if (!fabricCanvas) return;
+    if (previewLineRef.current) {
+      fabricCanvas.remove(previewLineRef.current);
+      previewLineRef.current = null;
+    }
+    for (const seg of previewSegmentsRef.current) {
+      fabricCanvas.remove(seg);
+    }
+    previewSegmentsRef.current = [];
+  }
+
   function handlePolylineComplete() {
+    cleanupPreview();
     const points = [...drawingPointsRef.current];
     const fabricCanvas = fabricInstanceRef.current;
     if (!fabricCanvas || points.length < 2 || !state.activePresetId) return;
@@ -425,6 +558,7 @@ export function TakeoffCanvas({
   }
 
   function handlePolygonComplete() {
+    cleanupPreview();
     const points = [...drawingPointsRef.current];
     const fabricCanvas = fabricInstanceRef.current;
     if (!fabricCanvas || points.length < 3 || !state.activePresetId) return;
@@ -590,6 +724,23 @@ export function TakeoffCanvas({
     isDrawingRef.current = false;
   }
 
+  function handleCloudComplete(x2: number, y2: number) {
+    const fabricCanvas = fabricInstanceRef.current;
+    if (!fabricCanvas || drawingPointsRef.current.length < 1) return;
+
+    const { x: x1, y: y1 } = drawingPointsRef.current[0];
+    const activeGroup = state.groups.find((g) => g.id === state.activePresetId);
+    const color = activeGroup?.color ?? '#22d3ee';
+    const id = crypto.randomUUID();
+
+    const cloud = createCloudAnnotation(x1, y1, x2, y2, color, id);
+    fabricCanvas.add(cloud);
+    fabricCanvas.renderAll();
+
+    drawingPointsRef.current = [];
+    isDrawingRef.current = false;
+  }
+
   function recalcGroupTotal(groupId: string) {
     let total = 0;
     for (const pageMeasurements of Object.values(state.measurements)) {
@@ -669,6 +820,16 @@ export function TakeoffCanvas({
           {calibrationPointsRef.current.length === 0
             ? 'Click the first calibration point'
             : 'Click the second calibration point'}
+        </div>
+      )}
+
+      {/* Hover tooltip */}
+      {tooltip && (
+        <div
+          className="absolute z-30 px-2.5 py-1.5 rounded-md bg-slate-900/95 border border-white/10 text-xs text-slate-200 pointer-events-none whitespace-nowrap shadow-lg"
+          style={{ left: tooltip.x, top: tooltip.y, transform: 'translateX(-50%)' }}
+        >
+          {tooltip.text}
         </div>
       )}
     </div>
