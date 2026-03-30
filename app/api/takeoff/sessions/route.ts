@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         name: body.name,
         pdfFileName: body.pdfFileName,
         pageCount: body.pageCount ?? 0,
-        createdBy: session.user?.id ?? null,
+        // createdBy omitted: legacy user table uses serial IDs, incompatible with UUID FK
       })
       .returning();
 
