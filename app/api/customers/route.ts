@@ -8,8 +8,9 @@ function dbError(err: unknown) {
   if (err instanceof Error && err.message.includes('DATABASE_URL')) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 503 });
   }
-  console.error('[customers API]', err);
-  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error('[customers API]', msg, err);
+  return NextResponse.json({ error: 'Internal server error', detail: msg }, { status: 500 });
 }
 
 export async function GET(req: NextRequest) {
