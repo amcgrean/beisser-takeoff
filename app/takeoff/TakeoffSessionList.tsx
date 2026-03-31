@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FileText, Calendar } from 'lucide-react';
+import { Plus, FileText, Calendar, Link2, X } from 'lucide-react';
 
 interface SessionData {
   id: string;
@@ -13,6 +13,14 @@ interface SessionData {
   bidId: string | null;
   bidJobName: string | null;
   bidNumber: string | null;
+  legacyBidId?: number | null;
+}
+
+interface LegacyBidOption {
+  id: number;
+  projectName: string;
+  customerName: string | null;
+  planType: string;
 }
 
 interface Props {
@@ -24,27 +32,49 @@ export function TakeoffSessionList({ sessions }: Props) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [showBidSearch, setShowBidSearch] = useState(false);
+  const [bidQuery, setBidQuery] = useState('');
+  const [bidOptions, setBidOptions] = useState<LegacyBidOption[]>([]);
+  const [selectedBid, setSelectedBid] = useState<LegacyBidOption | null>(null);
+  const bidSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!showBidSearch) return;
+    if (bidSearchTimer.current) clearTimeout(bidSearchTimer.current);
+    bidSearchTimer.current = setTimeout(async () => {
+      const res = await fetch(
+        `/api/legacy-bids?status=Incomplete&limit=20${bidQuery ? `&q=${encodeURIComponent(bidQuery)}` : ''}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setBidOptions(data.bids ?? []);
+      }
+    }, 300);
+  }, [bidQuery, showBidSearch]);
 
   async function handleCreate() {
     if (!newName.trim() || !pdfFile) return;
-    setCreating(true);
 
+    // If user opened bid search but didn't pick a bid, prompt them
+    if (showBidSearch && !selectedBid) {
+      if (!confirm('No bid selected. Create a standalone takeoff not linked to any bid?')) return;
+    }
+
+    setCreating(true);
     try {
-      // Create session via API
       const res = await fetch('/api/takeoff/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName,
           pdfFileName: pdfFile.name,
-          pageCount: 0, // Will be updated when PDF is loaded client-side
+          pageCount: 0,
+          legacyBidId: selectedBid?.id ?? null,
         }),
       });
 
       if (!res.ok) throw new Error('Failed to create session');
       const data = await res.json();
-
-      // Navigate to the new session
       router.push(`/takeoff/${data.session.id}`);
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -65,8 +95,8 @@ export function TakeoffSessionList({ sessions }: Props) {
             <Plus className="w-4 h-4 text-cyan-400" />
             New Takeoff Session
           </h2>
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
+          <div className="flex gap-3 items-end flex-wrap">
+            <div className="flex-1 min-w-48">
               <label className="text-xs text-slate-400 block mb-1">Session Name</label>
               <input
                 type="text"
@@ -76,7 +106,7 @@ export function TakeoffSessionList({ sessions }: Props) {
                 className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500"
               />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-48">
               <label className="text-xs text-slate-400 block mb-1">PDF Plan Set</label>
               <input
                 type="file"
@@ -92,6 +122,61 @@ export function TakeoffSessionList({ sessions }: Props) {
             >
               {creating ? 'Creating...' : 'Create'}
             </button>
+          </div>
+
+          {/* Optional bid link */}
+          <div className="mt-3 pt-3 border-t border-white/5">
+            {!showBidSearch && !selectedBid ? (
+              <button
+                onClick={() => setShowBidSearch(true)}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-cyan-400 transition-colors"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Link to a bid tracker bid (optional)
+              </button>
+            ) : selectedBid ? (
+              <div className="flex items-center gap-2 text-xs text-slate-300">
+                <Link2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Linked to: <span className="text-cyan-400">{selectedBid.projectName}</span> — {selectedBid.customerName} ({selectedBid.planType})</span>
+                <button onClick={() => { setSelectedBid(null); setBidQuery(''); }} className="text-slate-500 hover:text-red-400">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={bidQuery}
+                    onChange={(e) => setBidQuery(e.target.value)}
+                    placeholder="Search bids by project name or customer..."
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                  <button onClick={() => { setShowBidSearch(false); setBidQuery(''); setBidOptions([]); }} className="text-slate-500 hover:text-slate-300">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                {bidOptions.length > 0 && (
+                  <div className="bg-slate-800 border border-white/10 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    {bidOptions.map((b) => (
+                      <button
+                        key={b.id}
+                        onClick={() => { setSelectedBid(b); setShowBidSearch(false); if (!newName.trim()) setNewName(`${b.projectName} — ${b.customerName ?? ''}`); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-700 border-b border-white/5 last:border-0"
+                      >
+                        <span className="text-white">{b.projectName}</span>
+                        <span className="text-slate-400"> — {b.customerName} · {b.planType} · Bid #{b.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {bidOptions.length === 0 && bidQuery && (
+                  <p className="text-xs text-slate-500 pl-5">No open bids found</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -117,8 +202,11 @@ export function TakeoffSessionList({ sessions }: Props) {
                     {s.pageCount > 0 && <span>{s.pageCount} pages</span>}
                     {s.bidJobName && (
                       <span className="text-cyan-400/60">
-                        {s.bidNumber} — {s.bidJobName}
+                        {s.bidNumber ? `${s.bidNumber} — ` : ''}{s.bidJobName}
                       </span>
+                    )}
+                    {s.legacyBidId && !s.bidJobName && (
+                      <span className="text-cyan-400/60">Bid #{s.legacyBidId}</span>
                     )}
                   </div>
                 </div>

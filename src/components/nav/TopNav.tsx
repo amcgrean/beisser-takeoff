@@ -109,6 +109,7 @@ export function TopNav({ userName, userRole }: Props) {
                     { href: '/admin/bid-fields', label: 'Bid Fields' },
                     { href: '/admin/notifications', label: 'Notifications' },
                     { href: '/admin/audit', label: 'Audit Log' },
+                    { href: '/admin/erp', label: 'ERP Sync' },
                   ].map((item) => (
                     <Link
                       key={item.href}

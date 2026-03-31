@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
 
   let body: {
     bidId?: string;
+    legacyBidId?: number;
     name: string;
     pdfFileName: string;
     pageCount: number;
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
       .insert(schema.takeoffSessions)
       .values({
         bidId: body.bidId ?? null,
+        legacyBidId: body.legacyBidId ?? null,
         name: body.name,
         pdfFileName: body.pdfFileName,
         pageCount: body.pageCount ?? 0,

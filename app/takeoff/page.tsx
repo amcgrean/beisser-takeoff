@@ -13,6 +13,7 @@ export default async function TakeoffPage() {
     pageCount: number;
     createdAt: Date;
     bidId: string | null;
+    legacyBidId: number | null;
     bidJobName: string | null;
     bidNumber: string | null;
   }> = [];
@@ -29,6 +30,7 @@ export default async function TakeoffPage() {
         pageCount: schema.takeoffSessions.pageCount,
         createdAt: schema.takeoffSessions.createdAt,
         bidId: schema.takeoffSessions.bidId,
+        legacyBidId: schema.takeoffSessions.legacyBidId,
         bidJobName: schema.bids.jobName,
         bidNumber: schema.bids.bidNumber,
       })
