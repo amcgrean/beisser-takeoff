@@ -221,6 +221,8 @@ export const takeoffSessions = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     bidId: uuid('bid_id').references(() => bids.id),
+    // Link to a legacy bid tracker bid (integer FK — no cascade, legacy table)
+    legacyBidId: integer('legacy_bid_id'),
     name: varchar('name', { length: 255 }).notNull(),
     pdfFileName: varchar('pdf_file_name', { length: 500 }),
     pdfStorageKey: varchar('pdf_storage_key', { length: 1000 }),

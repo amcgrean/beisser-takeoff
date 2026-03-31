@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Session } from 'next-auth';
 import { useParams, useRouter } from 'next/navigation';
 import { TopNav } from '../../../src/components/nav/TopNav';
@@ -11,6 +11,10 @@ import {
   CheckCircle,
   Clock,
   FileText,
+  Ruler,
+  Upload,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -66,6 +70,10 @@ export default function ManageBidClient({ session }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [takeoffSessionId, setTakeoffSessionId] = useState<string | null>(null);
+  const [startingTakeoff, setStartingTakeoff] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Editable form state
   const [form, setForm] = useState<Record<string, unknown>>({});
@@ -73,13 +81,20 @@ export default function ManageBidClient({ session }: Props) {
   const fetchBid = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/legacy-bids/${bidId}`);
-      if (!res.ok) {
+      const [bidRes, takeoffRes] = await Promise.all([
+        fetch(`/api/legacy-bids/${bidId}`),
+        fetch(`/api/legacy-bids/${bidId}/start-takeoff`),
+      ]);
+      if (!bidRes.ok) {
         setError('Bid not found');
         return;
       }
-      const data = await res.json();
+      const data = await bidRes.json();
       setBid(data);
+      if (takeoffRes.ok) {
+        const td = await takeoffRes.json();
+        if (td.exists) setTakeoffSessionId(td.session.id);
+      }
       // Initialize form from bid data
       setForm({
         projectName: data.projectName,
@@ -166,6 +181,68 @@ export default function ManageBidClient({ session }: Props) {
     }
   };
 
+  const handleStartTakeoff = async () => {
+    setStartingTakeoff(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/legacy-bids/${bidId}/start-takeoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Failed to start takeoff'); return; }
+      router.push(`/takeoff/${data.sessionId}`);
+    } catch {
+      setError('Network error');
+    } finally {
+      setStartingTakeoff(false);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setUploadingFile(true);
+    setError('');
+    try {
+      // Try presigned upload first
+      const presignRes = await fetch(
+        `/api/legacy-bids/${bidId}/files?action=presign&fileName=${encodeURIComponent(file.name)}`
+      );
+      if (presignRes.ok) {
+        const { url, key } = await presignRes.json();
+        const putRes = await fetch(url, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+        if (putRes.ok) {
+          await fetch(`/api/legacy-bids/${bidId}/files`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, fileKey: key, fileType: file.type }),
+          });
+          fetchBid();
+          return;
+        }
+      }
+      // Fallback: proxy upload
+      const form = new FormData();
+      form.append('file', file);
+      await fetch(`/api/legacy-bids/${bidId}/files`, { method: 'POST', body: form });
+      fetchBid();
+    } catch {
+      setError('File upload failed');
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleDeleteFile = async (fileId: number) => {
+    if (!confirm('Remove this file?')) return;
+    await fetch(`/api/legacy-bids/${bidId}/files?fileId=${fileId}`, { method: 'DELETE' });
+    fetchBid();
+  };
+
   const setField = (key: string, value: unknown) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -217,6 +294,25 @@ export default function ManageBidClient({ session }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Takeoff button */}
+            {takeoffSessionId ? (
+              <Link
+                href={`/takeoff/${takeoffSessionId}`}
+                className="flex items-center gap-1 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Takeoff
+              </Link>
+            ) : (
+              <button
+                onClick={handleStartTakeoff}
+                disabled={startingTakeoff}
+                className="flex items-center gap-1 px-3 py-1.5 bg-cyan-800 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-lg text-sm"
+              >
+                <Ruler className="w-4 h-4" />
+                {startingTakeoff ? 'Starting...' : 'Start Takeoff'}
+              </button>
+            )}
             {bid.status !== 'Complete' && (
               <button
                 onClick={handleComplete}
@@ -364,7 +460,27 @@ export default function ManageBidClient({ session }: Props) {
           <div className="space-y-4">
             {/* Files */}
             <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <h3 className="font-semibold text-sm mb-3">Attachments</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-sm">Attachments</h3>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-50 rounded text-gray-300"
+                >
+                  <Upload className="w-3 h-3" />
+                  {uploadingFile ? 'Uploading...' : 'Add File'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
               {bid.files.length === 0 ? (
                 <p className="text-sm text-gray-500">No files attached</p>
               ) : (
@@ -372,10 +488,16 @@ export default function ManageBidClient({ session }: Props) {
                   {bid.files.map((f) => (
                     <div
                       key={f.id}
-                      className="flex items-center gap-2 text-sm text-gray-300"
+                      className="flex items-center gap-2 text-sm text-gray-300 group"
                     >
-                      <FileText className="w-3 h-3 text-gray-500" />
-                      <span className="truncate">{f.filename}</span>
+                      <FileText className="w-3 h-3 text-gray-500 flex-shrink-0" />
+                      <span className="truncate flex-1">{f.filename}</span>
+                      <button
+                        onClick={() => handleDeleteFile(f.id)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
                   ))}
                 </div>
