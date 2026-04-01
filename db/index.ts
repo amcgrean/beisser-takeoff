@@ -15,21 +15,10 @@ import * as legacySchema from './schema-legacy';
 // Use the direct (non-pooled) URL when available — avoids pgBouncer issues
 // with Drizzle's prepared statements. In serverless, max:1 is correct.
 function createDb() {
-  const whichVar = process.env.BIDS_DATABASE_URL
-    ? 'BIDS_DATABASE_URL'
-    : process.env.POSTGRES_URL_NON_POOLING
-    ? 'POSTGRES_URL_NON_POOLING'
-    : process.env.POSTGRES_URL
-    ? 'POSTGRES_URL'
-    : 'NONE';
   const databaseUrl =
     process.env.BIDS_DATABASE_URL ||
     process.env.POSTGRES_URL_NON_POOLING ||
     process.env.POSTGRES_URL;
-
-  // Log which env var is active and a safe host-only snippet for diagnostics
-  const hostHint = databaseUrl ? databaseUrl.replace(/\/\/[^@]+@/, '//***@').slice(0, 80) : '(none)';
-  console.log(`[db] using ${whichVar}: ${hostHint}`);
 
   if (!databaseUrl) {
     throw new Error(
