@@ -6,11 +6,18 @@
  *   BIDS_DATABASE_URL="<supabase-direct-connection-string>" \
  *   npx tsx db/migrate-from-neon.ts
  *
- * Prerequisites:
+ * IMPORTANT — BIDS_DATABASE_URL must be the DIRECT connection string (port 5432),
+ * NOT the pgBouncer pooled URL (port 6543). The pooler's transaction mode will
+ * break the DDL statements and large COPY-style inserts in this script.
+ * Use the "Direct connection" string from Supabase → Project Settings → Database.
+ *
+ * Prerequisites (run in this order — do NOT skip 0003c until after data load):
  *   1. Apply 0003_bids_schema_migration.sql in Supabase SQL editor
  *   2. Apply 0003b_legacy_tables_migration.sql in Supabase SQL editor
  *   3. Run this script
  *   4. Apply 0003c_legacy_fk_constraints.sql in Supabase SQL editor
+ *      ↑ Must be AFTER data load — the FK from takeoff_sessions → bid.id will
+ *        fail to enforce correctly if added before legacy rows are present.
  *
  * What this script does:
  *   - Copies all rows from every Neon table to the matching Supabase bids.* table
@@ -20,8 +27,9 @@
  *   - Is idempotent: safe to re-run (uses INSERT ... ON CONFLICT DO NOTHING)
  *
  * After a successful run:
- *   - Keep NEON_DATABASE_URL in your local .env for 2 weeks as a read-only fallback
- *   - Remove it from Vercel environment variables immediately after verifying production
+ *   - Keep NEON_DATABASE_URL as a local read-only fallback for 2 weeks
+ *   - Set BIDS_DATABASE_URL as a Fly secret (fly secrets set BIDS_DATABASE_URL=...)
+ *   - Remove the old Neon DATABASE_URL Fly secret only after staging is verified
  */
 
 import postgres from 'postgres';
@@ -225,12 +233,17 @@ async function run() {
   // -------------------------------------------------------------------------
   console.log('\n=== Migration complete ===');
   console.log('\nNext steps:');
-  console.log('  1. Verify row counts in Supabase dashboard');
+  console.log('  1. Verify row counts in Supabase dashboard:');
+  console.log('       SELECT table_name, n_live_tup FROM pg_stat_user_tables');
+  console.log('       WHERE schemaname = \'bids\' ORDER BY table_name;');
   console.log('  2. Apply db/migrations/0003c_legacy_fk_constraints.sql in Supabase SQL editor');
-  console.log('  3. Test the app against the new BIDS_DATABASE_URL');
-  console.log('  4. Update Vercel env vars: set BIDS_DATABASE_URL, remove old Neon DATABASE_URL');
+  console.log('     (adds takeoff_sessions → bid FK + resets all serial sequences)');
+  console.log('  3. Test the app locally against the new BIDS_DATABASE_URL');
+  console.log('  4. Set BIDS_DATABASE_URL as a Fly secret:');
+  console.log('       fly secrets set BIDS_DATABASE_URL="<supabase-direct-url>"');
   console.log('  5. Deploy to staging and smoke-test all pages');
-  console.log('  6. After 2-week validation window, decommission Neon (set to read-only first)\n');
+  console.log('  6. Remove old Neon DATABASE_URL Fly secret ONLY after staging passes');
+  console.log('  7. After 2-week validation window, decommission Neon (set read-only first)\n');
 
   await neon.end();
   await supabase.end();
