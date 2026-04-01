@@ -43,8 +43,8 @@ Both connections use `prepare: false` and `max: 1` (serverless-safe, pgBouncer-c
 
 ### Auth
 - NextAuth v5 beta, credentials provider, JWT strategy
-- Legacy `bids."user"` table (serial IDs, plain-text passwords — bcrypt migration pending in Phase 5)
-- `auth.ts` does raw SQL against `bids."user"` table
+- Legacy `bids."user"` table (serial IDs). Passwords are plaintext but auto-upgrade to bcrypt on successful login. Bulk bcrypt migration planned for Phase 5.
+- `auth.ts` queries `bids."user"` via Drizzle ORM
 - Dev bypass: username `admin` / password `ChangeMe123!`
 
 ## PDF Takeoff Engine
@@ -128,11 +128,14 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 - **Admin panel**: `app/admin/erp/` — Connection status, table discovery, column viewer, data preview, manual sync, sync history
 - **Cron**: `/api/cron/erp-sync` — Daily at 6 AM UTC
 
-### Phase 4.5: Supabase DB Migration — COMPLETE (code merged, data migration pending)
+### Phase 4.5: Supabase DB Migration — COMPLETE
 - All app tables now defined in `bids` schema on Supabase (was Neon `public`)
 - Driver switched from `@neondatabase/serverless` to `postgres.js` across the board
-- `db/migrate-from-neon.ts` — one-time migration script, run after SQL files applied
-- Migration SQL files in `db/migrations/0003*` — apply in Supabase SQL editor before running script
+- Neon env vars removed from Vercel; app uses `POSTGRES_URL_NON_POOLING` (Supabase direct)
+- Debug/diagnostic logging stripped from `auth.ts` and `db/index.ts`
+- Auth supports bcrypt password hashes with automatic upgrade from plaintext on login
+- `db/migrate-from-neon.ts` — one-time migration script (reference only, migration executed)
+- Migration SQL files in `db/migrations/0003*` — applied in Supabase SQL editor
 
 ### Phase 5: Unification and Cleanup — NOT STARTED
 - Unified bid view (legacy flat + JSONB takeoff bids in combined display)
@@ -144,13 +147,11 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 - Flask app sunset, DNS routing, archive
 
 ## Pending Actions
-1. **Execute data migration**: Apply SQL files `0003`, `0003b`, `0003c` in Supabase SQL editor, then run `db/migrate-from-neon.ts` (see script header for full instructions)
-2. **Set Fly secret**: `fly secrets set BIDS_DATABASE_URL="<supabase-direct-url>"` after data migration verified
-3. **Remove Neon secret**: Remove old Neon `DATABASE_URL` Fly secret after 2-week validation window
-4. **Design management (2A)**: Full CRUD for designs with activity log
-5. **Layouts management (2B)**: Full CRUD for layouts/EWP with CSV import
-6. **Phase 5**: Unified bid view, bcrypt password migration, customer-centric views
-7. **Phase 6**: Polish, Flask sunset
+1. **S3 → R2 file migration**: PR `claude/migrate-s3-to-r2` is open. Needs repo secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) added before merge. Supports `dry_run=true`.
+2. **Design management (2A)**: Full CRUD for designs with activity log
+3. **Layouts management (2B)**: Full CRUD for layouts/EWP with CSV import
+4. **Phase 5**: Unified bid view, bcrypt password migration, customer-centric views
+5. **Phase 6**: Polish, Flask sunset
 
 ## API Route Patterns
 - **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
@@ -171,9 +172,9 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 - Lucide React icons, papaparse, zod, date-fns
 
 ## Environment Variables
-- `BIDS_DATABASE_URL` — Supabase direct connection string (port 5432, **not** pooler 6543). Primary app DB.
-- `POSTGRES_URL_NON_POOLING` — Vercel Supabase integration direct URL (fallback for `BIDS_DATABASE_URL`)
-- `POSTGRES_URL` — Vercel Supabase integration pooled URL (last resort)
+- `BIDS_DATABASE_URL` — Supabase direct connection string (port 5432, **not** pooler 6543). Primary app DB. Currently not set; app uses `POSTGRES_URL_NON_POOLING` via Vercel Supabase integration.
+- `POSTGRES_URL_NON_POOLING` — Vercel Supabase integration direct URL (active primary connection)
+- `POSTGRES_URL` — Vercel Supabase integration pooled URL (last resort fallback)
 - `AUTH_SECRET` — NextAuth secret
 - `R2_ACCOUNT_ID` — Cloudflare account ID
 - `R2_ACCESS_KEY_ID` — R2 API token access key
