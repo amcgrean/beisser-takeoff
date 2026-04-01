@@ -1,11 +1,12 @@
 # Estimating App Migration Plan
 
-**Goal:** Merge the Flask/Python `estimating-app` into `beisser-takeoff` (Next.js 15/TypeScript). One unified app, same Neon Postgres DB. Convert all Python logic to TypeScript. Sunset Flask when done.
+**Goal:** Merge the Flask/Python `estimating-app` into `beisser-takeoff` (Next.js 15/TypeScript). One unified app, single Supabase Postgres database. Convert all Python logic to TypeScript. Sunset Flask when done.
 
 **Decisions made:**
 - Migrate ALL Flask features (bids, designs, layouts/EWP, projects, notifications, IT issues, audit, ERP sync, permissions, dynamic fields)
 - Consolidate file storage on Cloudflare R2 (read legacy S3 files during transition, write everything new to R2)
 - Use Resend for email notifications
+- **DB platform**: Neon → Supabase (`bids` schema). ERP mirror tables remain in `public` schema on the same instance. WH-Tracker owns `public` via Alembic — zero collision risk.
 
 ---
 
@@ -230,15 +231,36 @@ Extend the existing admin portal at `app/admin/`.
 
 ---
 
-## Phase 4: ERP Sync
+## Phase 4: ERP Sync — ✅ COMPLETE
 
-**Create:**
-- `src/lib/erp-sync.ts` — Business logic converted from Flask's `import_data.py`
-- `app/api/cron/erp-sync/route.ts` — Token-protected endpoint for Vercel Cron
+- `src/lib/erp-sync.ts` — Customer sync, item search, ship-to lookup
+- `app/api/cron/erp-sync/route.ts` — Token-protected cron endpoint
+- `app/admin/erp/` — Admin panel: connection status, table discovery, manual sync, sync history
 
-**Modify:** `vercel.json` — Add `crons` configuration for scheduled sync.
+---
 
-**Add env var:** `CRON_SECRET`
+## Phase 4.5: Supabase DB Migration — ✅ CODE MERGED / DATA MIGRATION PENDING
+
+Moved all beisser-takeoff tables from Neon `public` to Supabase `bids` schema.
+
+**What's done:**
+- `db/schema.ts` — `pgSchema('bids')` on all tables; enhanced columns (legacy_id bridge, deleted_at, user profile fields, FTS indexes)
+- `db/schema-legacy.ts` — All legacy serial-ID tables now use `bidsSchema.table()`; `general_audit.changes` upgraded to JSONB
+- `db/index.ts` — Driver switched from `@neondatabase/serverless` to `postgres.js`
+- `db/supabase.ts` — ERP-only connection; same Supabase instance, `public` schema
+- `drizzle.config.ts` — `schemaFilter: ['bids']`, `BIDS_DATABASE_URL`, UUID tables only in `tablesFilter`
+- `db/migrations/0003_bids_schema_migration.sql` — Full DDL for UUID tables in bids schema
+- `db/migrations/0003b_legacy_tables_migration.sql` — Full DDL for legacy serial-ID tables
+- `db/migrations/0003c_legacy_fk_constraints.sql` — FK from takeoff_sessions → bid.id + sequence resets (run AFTER data load)
+- `db/migrate-from-neon.ts` — One-time idempotent data migration script
+
+**What still needs to happen (in order):**
+1. Apply `0003_bids_schema_migration.sql` in Supabase SQL editor
+2. Apply `0003b_legacy_tables_migration.sql` in Supabase SQL editor
+3. Run: `NEON_DATABASE_URL=... BIDS_DATABASE_URL=... npx tsx db/migrate-from-neon.ts`
+4. Apply `0003c_legacy_fk_constraints.sql` in Supabase SQL editor
+5. `fly secrets set BIDS_DATABASE_URL="<supabase-direct-url>"`
+6. Verify staging, then remove old Neon DATABASE_URL Fly secret
 
 ---
 
@@ -328,4 +350,4 @@ Phase 6 (Polish) ─── after everything
 2. **Legacy table name collisions** — Flask's `"branch"` table vs Drizzle's `"branches"` table. Both exist with different schemas. `schema-legacy.ts` must map to exact table names.
 3. **Drizzle migration safety** — NEVER run `drizzle-kit push/generate` against legacy tables. Use `tablesFilter` in config.
 4. **Legacy S3 files** — During transition, must be able to read files from the original S3 bucket. R2 is S3-compatible so we can potentially point the R2 client at the old S3 endpoint for reads.
-5. **No data migration needed** — Both apps share the same Neon Postgres DB. All legacy data stays in place.
+5. **DB platform change** — App tables moved from Neon to Supabase `bids` schema. `db/migrate-from-neon.ts` handles the one-time data transfer. The `public` schema (ERP + WH-Tracker) is untouched.

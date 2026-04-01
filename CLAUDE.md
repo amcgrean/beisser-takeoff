@@ -1,30 +1,50 @@
 # Beisser Takeoff — Development Context
 
 ## Project Overview
-Beisser Lumber Co. internal estimating app (Next.js 15, TypeScript, Tailwind, Drizzle ORM, Neon Postgres, NextAuth v5). Deployed on Vercel at `beisser-takeoff.vercel.app`. Used by sales staff/estimators at four Iowa lumberyard locations.
+Beisser Lumber Co. internal estimating app (Next.js 15, TypeScript, Tailwind, Drizzle ORM, Supabase Postgres, NextAuth v5). Used by sales staff/estimators at four Iowa lumberyard locations.
 
 ## Architecture Overview
 
-### Dual Database Setup
-- **Neon Postgres** (app DB): All application tables — legacy Alembic-managed + new Drizzle-managed. Connected via `@neondatabase/serverless`.
-- **Supabase Postgres** (ERP DB): Read-only ERP mirror tables (`erp_mirror_*`). Connected via `postgres.js` driver. Large tables (items: 156K, item_branch: 1.4M, ship-to: 145K) queried live; customers (4,925 rows) synced daily to Neon.
+### Single Database — Supabase (agility-api project)
+All data lives in one Supabase Postgres instance, split into two schemas:
 
-### Dual Schema System
-- `db/schema.ts` — New UUID-based tables (bids, users, customers, takeoff_*, assemblies, products, multipliers, branches). Drizzle-managed.
-- `db/schema-legacy.ts` — Legacy serial-ID tables (user, customer, bid, design, estimator, etc.). Alembic-managed, READ-ONLY Drizzle definitions. **NEVER run drizzle-kit push/generate against these.**
-- `db/supabase.ts` — Supabase ERP connection. Exports `getErpDb()`, `getErpSql()`, `isErpConfigured()`.
+| Schema | Owner | Contents |
+|--------|-------|----------|
+| `public` | WH-Tracker (Alembic) | ERP mirror tables (`erp_mirror_*`), WH-Tracker app tables |
+| `bids` | beisser-takeoff (Drizzle) | All beisser-takeoff tables — UUID-based new tables + migrated legacy serial-ID tables |
+
+**Never run drizzle-kit against the `public` schema.** `drizzle.config.ts` has `schemaFilter: ['bids']` to enforce this.
+
+### Database Connections
+- `db/index.ts` — App DB. Uses `postgres.js` + `drizzle-orm/postgres-js`. Resolves `BIDS_DATABASE_URL` → `POSTGRES_URL_NON_POOLING` → `POSTGRES_URL`. All tables in `bids` schema.
+- `db/supabase.ts` — ERP reads. Same Supabase instance, `public` schema. Exports `getErpDb()`, `getErpSql()`, `isErpConfigured()`.
+
+Both connections use `prepare: false` and `max: 1` (serverless-safe, pgBouncer-compatible).
+
+### Schema Files
+- `db/schema.ts` — UUID-based tables in `bids` schema. Drizzle-managed via `drizzle-kit`. Exports `bidsSchema` (the `pgSchema('bids')` instance).
+- `db/schema-legacy.ts` — Legacy serial-ID tables in `bids` schema. **READ/WRITE definitions only — never run drizzle-kit push/generate against these.** Imports `bidsSchema` from `schema.ts`.
+- `db/migrations/` — SQL migration files. `0003*` files must be applied manually in Supabase SQL editor.
 
 ### Key Relationships
-- `legacyBid` (serial int, `bid` table) = bid tracker entry
-- `bids` (UUID, `bids` table) = takeoff/estimating project with JSONB `inputs`
-- `takeoffSessions.bidId` → `bids.id` (UUID FK)
-- `takeoffSessions.legacyBidId` → `bid.id` (integer, no FK constraint — cross-schema)
+- `legacyBid` (serial int, `bids.bid` table) = legacy flat bid tracker entry
+- `bids` (UUID, `bids.bids` table) = takeoff/estimating project with JSONB `inputs`
+- `takeoffSessions.bidId` → `bids.bids.id` (UUID FK)
+- `takeoffSessions.legacyBidId` → `bids.bid.id` (integer FK — added via 0003c migration)
 - "Start Takeoff" from a legacy bid creates a `bids` record + `takeoffSession` linked to both
+
+### Schema Enhancements (added during Supabase migration)
+- `users`: `legacy_id` (maps Flask serial user), `branch_id`, `is_estimator`, `is_designer`, `is_commercial_estimator`, `permissions` (JSONB), `last_login`, `login_count`, `deleted_at`
+- `customers`: `legacy_id` (maps Flask serial customer), `deleted_at`
+- `bids`, `takeoff_sessions`: `deleted_at` (soft delete)
+- `customers.name`, `bids.job_name`: GIN full-text search indexes
+- `general_audit.changes`: upgraded from `text` to `jsonb`
+- All timestamps: `withTimezone: true`
 
 ### Auth
 - NextAuth v5 beta, credentials provider, JWT strategy
-- Legacy `"user"` table (serial IDs, plain-text passwords)
-- `auth.ts` does raw SQL against `"user"` table
+- Legacy `bids."user"` table (serial IDs, plain-text passwords — bcrypt migration pending in Phase 5)
+- `auth.ts` does raw SQL against `bids."user"` table
 - Dev bypass: username `admin` / password `ChangeMe123!`
 
 ## PDF Takeoff Engine
@@ -102,30 +122,38 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 - CSV import/export endpoints
 
 ### Phase 4: ERP Sync — COMPLETE
-- **Supabase connection**: `db/supabase.ts` (postgres.js driver, singleton)
-- **Sync engine**: `src/lib/erp-sync.ts` — Customer sync (upserts erp_mirror_cust → Neon customer table), item search (joins item + item_branch, filtered by branch), ship-to lookup, raw table query for admin
+- **Supabase connection**: `db/supabase.ts` (postgres.js driver, singleton, ERP public schema reads)
+- **Sync engine**: `src/lib/erp-sync.ts` — Customer sync (upserts erp_mirror_cust → bids.customers), item search (joins item + item_branch, filtered by branch), ship-to lookup, raw table query for admin
 - **API routes**: `/api/erp/items`, `/api/erp/customers/[code]`, `/api/erp/customers/[code]/ship-to`
 - **Admin panel**: `app/admin/erp/` — Connection status, table discovery, column viewer, data preview, manual sync, sync history
-- **Cron**: `/api/cron/erp-sync` — Daily at 6 AM UTC (Vercel Hobby plan limit)
+- **Cron**: `/api/cron/erp-sync` — Daily at 6 AM UTC
+
+### Phase 4.5: Supabase DB Migration — COMPLETE (code merged, data migration pending)
+- All app tables now defined in `bids` schema on Supabase (was Neon `public`)
+- Driver switched from `@neondatabase/serverless` to `postgres.js` across the board
+- `db/migrate-from-neon.ts` — one-time migration script, run after SQL files applied
+- Migration SQL files in `db/migrations/0003*` — apply in Supabase SQL editor before running script
 
 ### Phase 5: Unification and Cleanup — NOT STARTED
 - Unified bid view (legacy flat + JSONB takeoff bids in combined display)
-- Password security (bcrypt migration)
+- Password security (bcrypt migration for legacy `bids."user"` table)
 - Customer-centric views (all bids for a customer)
 
 ### Phase 6: Polish and Sunset — NOT STARTED
 - Print-optimized CSS, responsive audit, error boundaries
 - Flask app sunset, DNS routing, archive
 
-## Pending Migration Actions
-1. **Apply migration SQL**: Run `db/migrations/0002_takeoff_legacy_bid_link.sql` in Neon SQL Editor
-2. **Design management (2A)**: Full CRUD for designs with activity log
-3. **Layouts management (2B)**: Full CRUD for layouts/EWP with CSV import
-4. **Phase 5**: Unified bid view, bcrypt password migration, customer-centric views
-5. **Phase 6**: Polish, Flask sunset
+## Pending Actions
+1. **Execute data migration**: Apply SQL files `0003`, `0003b`, `0003c` in Supabase SQL editor, then run `db/migrate-from-neon.ts` (see script header for full instructions)
+2. **Set Fly secret**: `fly secrets set BIDS_DATABASE_URL="<supabase-direct-url>"` after data migration verified
+3. **Remove Neon secret**: Remove old Neon `DATABASE_URL` Fly secret after 2-week validation window
+4. **Design management (2A)**: Full CRUD for designs with activity log
+5. **Layouts management (2B)**: Full CRUD for layouts/EWP with CSV import
+6. **Phase 5**: Unified bid view, bcrypt password migration, customer-centric views
+7. **Phase 6**: Polish, Flask sunset
 
 ## API Route Patterns
-- **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc.
+- **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
 - **New tables**: Import from `'<relative>/db/index'` as `{ getDb, schema }`
 - **ERP queries**: Import from `'<relative>/db/supabase'` as `{ getErpDb }`
 - **Auth**: `import { auth } from '<relative>/auth'`
@@ -135,24 +163,23 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 ## Tech Stack
 - Next.js 15.1 (App Router), React 19, TypeScript 5.7
 - Tailwind CSS 3.4 (dark theme, cyan accent: brand.400/500/600)
-- Drizzle ORM + Neon Postgres (serverless, neon-http driver)
-- Supabase Postgres (ERP DB via postgres.js + drizzle-orm/postgres-js)
+- Drizzle ORM + Supabase Postgres (`bids` schema, postgres.js driver)
+- Supabase Postgres (ERP reads via `public` schema, same instance)
 - Cloudflare R2 (file storage via @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner)
 - NextAuth v5 beta (credentials provider, JWT strategy)
 - pdfjs-dist 5.6, fabric 7.x (NOT v6 — mouse event API differs), jspdf 2.x
 - Lucide React icons, papaparse, zod, date-fns
-- Vercel deployment with `vercel.json` + `.github/workflows/deploy.yml`
 
-## Environment Variables (Vercel)
-- `BIDS_DATABASE_URL` — Neon Postgres connection string (also checked as `DATABASE_URL`)
+## Environment Variables
+- `BIDS_DATABASE_URL` — Supabase direct connection string (port 5432, **not** pooler 6543). Primary app DB.
+- `POSTGRES_URL_NON_POOLING` — Vercel Supabase integration direct URL (fallback for `BIDS_DATABASE_URL`)
+- `POSTGRES_URL` — Vercel Supabase integration pooled URL (last resort)
 - `AUTH_SECRET` — NextAuth secret
 - `R2_ACCOUNT_ID` — Cloudflare account ID
 - `R2_ACCESS_KEY_ID` — R2 API token access key
 - `R2_SECRET_ACCESS_KEY` — R2 API token secret
 - `R2_BUCKET_NAME` — R2 bucket name (defaults to `bids`)
-- `POSTGRES_URL_NON_POOLING` / `POSTGRES_URL` / `SUPABASE_DB_URL` — Supabase ERP DB connection
 - `CRON_SECRET` — Bearer token for cron endpoint auth
-- `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` — GitHub Actions deploy secrets
 
 ## Navigation Structure
 - **Top nav**: Dashboard, Bids, Designs, EWP, Projects, IT Issues, Estimating, PDF Takeoff
@@ -162,5 +189,7 @@ Full migration plan in `docs/migration-plan.md`. Six phases.
 ## Key Conventions
 - Path alias: `@/*` → `./src/*`, `@/db/*` → `./db/*` (but API routes use relative paths for db imports)
 - Legacy table column names match Flask/SQLAlchemy models exactly (e.g., `customerCode` not `customer_code`)
+- All tables (new + legacy) are in the `bids` schema — Drizzle handles schema qualification transparently
 - Admin customers page uses `legacyCustomer` (serial IDs), NOT `schema.customers` (UUID)
 - `createdBy` omitted from takeoff session inserts (legacy serial user IDs incompatible with UUID FK)
+- `general_audit.changes` is `jsonb` (not `text`) — Drizzle types it as `unknown`; cast or handle accordingly in consuming code
