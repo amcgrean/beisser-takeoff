@@ -491,7 +491,18 @@ export default function ManageBidClient({ session }: Props) {
                       className="flex items-center gap-2 text-sm text-gray-300 group"
                     >
                       <FileText className="w-3 h-3 text-gray-500 flex-shrink-0" />
-                      <span className="truncate flex-1">{f.filename}</span>
+                      <button
+                        className="truncate flex-1 text-left hover:text-cyan-400 transition-colors"
+                        onClick={async () => {
+                          const res = await fetch(`/api/legacy-bids/${bidId}/files?action=download&fileId=${f.id}`);
+                          if (res.ok) {
+                            const { url } = await res.json();
+                            window.open(url, '_blank');
+                          }
+                        }}
+                      >
+                        {f.filename}
+                      </button>
                       <button
                         onClick={() => handleDeleteFile(f.id)}
                         className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity"

@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -50,6 +51,31 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get('action');
   const fileName = searchParams.get('fileName')?.trim();
+  const fileId = parseInt(searchParams.get('fileId') ?? '', 10);
+
+  // Presigned download URL
+  if (action === 'download') {
+    if (isNaN(fileId)) return NextResponse.json({ error: 'fileId required' }, { status: 422 });
+    try {
+      const db = getDb();
+      const [file] = await db.select().from(legacyBidFile).where(eq(legacyBidFile.id, fileId)).limit(1);
+      if (!file || file.bidId !== bidId) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      const r2 = getR2();
+      const url = await getSignedUrl(
+        r2,
+        new GetObjectCommand({
+          Bucket: getBucket(),
+          Key: file.fileKey,
+          ResponseContentDisposition: `attachment; filename="${file.filename}"`,
+        }),
+        { expiresIn: 300 }
+      );
+      return NextResponse.json({ url });
+    } catch (err) {
+      console.error('[bid files download]', err);
+      return NextResponse.json({ error: 'Failed to generate download URL' }, { status: 500 });
+    }
+  }
 
   // List files
   if (action !== 'presign') {
