@@ -2,7 +2,7 @@ import { auth } from '../../auth';
 import Link from 'next/link';
 import { Building2, Package, Calculator, Users, FolderOpen } from 'lucide-react';
 
-export const metadata = { title: 'Admin Dashboard | Beisser Takeoff' };
+export const metadata = { title: 'Admin Dashboard | LiveEdge' };
 
 const CARDS = [
   { href: '/bids', label: 'All Bids', description: 'View and manage all estimates', icon: FolderOpen, color: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20' },
@@ -18,7 +18,7 @@ export default async function AdminDashboard() {
     <div className="max-w-4xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">Admin Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-1">Welcome, {session?.user?.name}. Manage your Beisser Takeoff system.</p>
+        <p className="text-slate-400 text-sm mt-1">Welcome, {session?.user?.name}. Manage your LiveEdge system.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

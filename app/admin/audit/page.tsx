@@ -2,7 +2,7 @@ import { auth } from '../../../auth';
 import { redirect } from 'next/navigation';
 import AuditClient from './AuditClient';
 
-export const metadata = { title: 'Audit Log | Beisser Admin' };
+export const metadata = { title: 'Audit Log | LiveEdge' };
 
 export default async function AuditPage() {
   const session = await auth();

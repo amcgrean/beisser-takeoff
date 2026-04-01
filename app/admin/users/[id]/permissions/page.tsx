@@ -2,7 +2,7 @@ import { auth } from '../../../../../auth';
 import { redirect } from 'next/navigation';
 import PermissionsClient from './PermissionsClient';
 
-export const metadata = { title: 'User Permissions | Beisser Admin' };
+export const metadata = { title: 'User Permissions | LiveEdge' };
 
 export default async function PermissionsPage() {
   const session = await auth();

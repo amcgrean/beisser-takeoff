@@ -94,8 +94,7 @@ export function TopNav({ userName, userRole }: Props) {
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 text-white font-bold text-lg flex-shrink-0">
               <Hammer className="w-5 h-5 text-cyan-400" />
-              <span className="hidden sm:inline">Beisser</span>
-              <span className="text-cyan-400">Takeoff</span>
+              <span>Live<span className="text-cyan-400">Edge</span></span>
             </Link>
 
             {/* Desktop main nav */}

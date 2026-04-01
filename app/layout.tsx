@@ -4,8 +4,8 @@ import { SessionProvider } from 'next-auth/react';
 import { auth } from '../auth';
 
 export const metadata: Metadata = {
-  title: 'Beisser Takeoff | House Estimator',
-  description: 'Beisser Lumber Co. Digital Takeoff Estimator',
+  title: 'LiveEdge | Estimating',
+  description: 'LiveEdge — Internal estimating platform.',
 };
 
 export const viewport: Viewport = {

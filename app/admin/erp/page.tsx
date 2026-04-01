@@ -2,7 +2,7 @@ import { auth } from '../../../auth';
 import { redirect } from 'next/navigation';
 import ERPClient from './ERPClient';
 
-export const metadata = { title: 'ERP Sync | Beisser Admin' };
+export const metadata = { title: 'ERP Sync | LiveEdge' };
 
 export default async function ERPPage() {
   const session = await auth();
