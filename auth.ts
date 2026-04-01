@@ -66,9 +66,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null;
           }
 
-          console.log('[auth] getting db');
           const db = getDb();
-          console.log('[auth] querying user');
           const rows = await db
             .select()
             .from(legacyUser)
@@ -80,16 +78,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             )
             .limit(1);
 
-          console.log('[auth] query done, rows:', rows.length);
           const user = rows[0];
           if (!user) return null;
           if (user.isActive === false) return null;
 
           // Verify password — supports both bcrypt hashes and legacy plaintext.
           // On successful plaintext login, the hash is automatically upgraded.
-          console.log('[auth] verifying password, isBcrypt:', isBcryptHash(user.password));
           const passwordOk = await verifyPassword(password, user.password);
-          console.log('[auth] passwordOk:', passwordOk);
           if (!passwordOk) return null;
 
           // Auto-upgrade: if stored as plaintext, silently rehash to bcrypt
@@ -118,8 +113,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             branchId: user.userBranchId,
           };
         } catch (err) {
-          const msg = err instanceof Error ? `${err.message}\n${err.stack}` : JSON.stringify(err);
-          console.error('[auth] authorize error:', msg);
+          console.error('[auth] authorize error:', err);
           return null;
         }
       },
