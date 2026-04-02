@@ -22,6 +22,7 @@ import {
   Warehouse,
   ClipboardList,
   Truck,
+  ShoppingCart,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -41,6 +42,7 @@ const NAV_LINKS = [
   { href: '/warehouse',   label: 'Warehouse',   icon: <Warehouse className="w-4 h-4" /> },
   { href: '/work-orders', label: 'Work Orders', icon: <ClipboardList className="w-4 h-4" /> },
   { href: '/dispatch',   label: 'Dispatch',    icon: <Truck className="w-4 h-4" /> },
+  { href: '/sales',      label: 'Sales',       icon: <ShoppingCart className="w-4 h-4" /> },
   { href: '/',           label: 'Estimating',  icon: <FileText className="w-4 h-4" /> },
   { href: '/takeoff',   label: 'PDF Takeoff', icon: <Hammer className="w-4 h-4" /> },
 ];
