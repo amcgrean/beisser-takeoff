@@ -180,9 +180,8 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - DNS routing, archive Flask app
 
 ## Pending Actions
-1. **Vercel env vars**: Add `SAMSARA_API_TOKEN`, `SAMSARA_BRANCH_TAGS_JSON`, `SAMSARA_VEHICLE_BRANCH_MAP`, `SAMSARA_CACHE_TTL` to Vercel environment
-2. **Bug testing**: Users testing 2026-04-03. Known risk areas: WH-Tracker public schema table access (pick, pickster, pick_assignments, work_orders tables), Samsara vehicle GPS
-3. **Phase 6 Flask sunset**: DNS cutover, archive Flask app after testing confirms parity
+1. **Bug testing**: Users testing 2026-04-03. Known risk areas: WH-Tracker public schema table access (pick, pickster, pick_assignments, work_orders tables), Samsara vehicle GPS
+2. **Phase 6 Flask sunset**: DNS cutover, archive Flask app after testing confirms parity
 
 ## API Route Patterns
 - **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
@@ -203,15 +202,33 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - Lucide React icons, papaparse, zod, date-fns
 
 ## Environment Variables
+
+### Database / Auth
 - `BIDS_DATABASE_URL` — Supabase direct connection string (port 5432, **not** pooler 6543). Primary app DB. Currently not set; app uses `POSTGRES_URL_NON_POOLING` via Vercel Supabase integration.
 - `POSTGRES_URL_NON_POOLING` — Vercel Supabase integration direct URL (active primary connection)
 - `POSTGRES_URL` — Vercel Supabase integration pooled URL (last resort fallback)
 - `AUTH_SECRET` — NextAuth secret
+
+### Storage
 - `R2_ACCOUNT_ID` — Cloudflare account ID
 - `R2_ACCESS_KEY_ID` — R2 API token access key
 - `R2_SECRET_ACCESS_KEY` — R2 API token secret
 - `R2_BUCKET_NAME` — R2 bucket name (defaults to `bids`)
 - `CRON_SECRET` — Bearer token for cron endpoint auth
+
+### Samsara GPS (WH-Tracker modules — all set in Vercel as of 2026-04-02)
+- `SAMSARA_API_TOKEN` — Samsara fleet API token
+- `SAMSARA_BRANCH_TAGS_JSON` — JSON map of branch code → Samsara tag names array (e.g. `{"20GR":["grimes"],...}`)
+- `SAMSARA_VEHICLE_BRANCH_MAP` — JSON map of Samsara vehicle ID → branch code (e.g. `{"281474997057684":"25BW",...}`)
+- `SAMSARA_CACHE_TTL` — Vehicle location cache TTL in seconds (default 30; set to 15 in Vercel)
+
+### Email / OTP (set in Vercel; OTP flow not yet implemented in LiveEdge)
+- `RESEND_API_KEY` — Resend.com API key for transactional email
+- `OTP_EMAIL_FROM` — Sender address for OTP emails (e.g. `noreply@beisser.cloud`)
+- `OTP_APP_NAME` — App name shown in OTP emails (e.g. `Beisser Ops`)
+- `AUTH_REQUIRED` — Whether OTP auth is enforced (`true`/`false`); currently `false` (NextAuth handles auth)
+- `AUTH_OTP_CONSOLE` — Print OTP codes to server console instead of emailing (`true`/`false`)
+- `SESSION_COOKIE_SECURE` — Secure flag on session cookie (`true` in prod, `false` in dev)
 
 ## Navigation Structure
 - **Top nav**: Dashboard, Bids, Designs, EWP, Projects, IT Issues, Estimating, PDF Takeoff
