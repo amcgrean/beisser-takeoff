@@ -218,7 +218,7 @@ export default function App() {
                                     House Estimator <span className="text-blue-600 font-extrabold">Pro</span>
                                 </h1>
                                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mt-0.5">
-                                    Beisser Lumber Co. Digital Takeoff
+                                    LiveEdge
                                 </p>
                                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
                                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 font-semibold">

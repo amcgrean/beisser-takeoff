@@ -2,7 +2,7 @@ import { auth } from '../../auth';
 import { redirect } from 'next/navigation';
 import DesignsClient from './DesignsClient';
 
-export const metadata = { title: 'Designs | Beisser Lumber' };
+export const metadata = { title: 'Designs | LiveEdge' };
 
 export default async function DesignsPage() {
   const session = await auth();

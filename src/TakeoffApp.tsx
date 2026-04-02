@@ -193,7 +193,7 @@ export default function TakeoffApp({ session, initialBidId }: Props) {
               </div>
             ) : (
               <p className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                Beisser Lumber Co. · New Bid
+                LiveEdge · New Bid
               </p>
             )}
           </div>

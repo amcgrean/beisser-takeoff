@@ -43,7 +43,7 @@ export default function LoginPage() {
               <Hammer className="w-5 h-5 text-cyan-400" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white">Beisser Takeoff</h1>
+          <h1 className="text-2xl font-bold text-white">Live<span className="text-cyan-400">Edge</span></h1>
           <p className="text-slate-400 text-sm mt-1">Sign in to your account</p>
         </div>
 
@@ -119,7 +119,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          Beisser Lumber Co. · Internal Estimating Tool
+          LiveEdge · Internal Estimating Tool
         </p>
       </div>
     </div>

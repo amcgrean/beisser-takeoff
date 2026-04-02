@@ -2,7 +2,7 @@ import { auth } from '../../../auth';
 import { redirect } from 'next/navigation';
 import ManageProjectClient from './ManageProjectClient';
 
-export const metadata = { title: 'Manage Project | Beisser Lumber' };
+export const metadata = { title: 'Manage Project | LiveEdge' };
 
 export default async function ManageProjectPage() {
   const session = await auth();
