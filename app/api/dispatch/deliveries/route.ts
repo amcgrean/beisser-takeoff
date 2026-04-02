@@ -29,8 +29,6 @@ const DELIVERY_STATUS_LABELS: Record<string, string> = {
   C: 'Completed',
 };
 
-export { DELIVERY_STATUS_LABELS };
-
 // GET /api/dispatch/deliveries?date=2026-04-02&branch=20GR
 export async function GET(req: NextRequest) {
   const session = await auth();
