@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenPickSummary } from '../api/warehouse/picks/route';
 
 interface BranchStats {
@@ -15,6 +16,8 @@ interface Props {
   initialStats: BranchStats[];
   isAdmin: boolean;
   userBranch: string | null;
+  userName: string | null;
+  userRole?: string;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -36,7 +39,7 @@ function handlingColor(code: string) {
   return HANDLING_COLORS[code.toUpperCase()] ?? 'bg-cyan-900/60 text-cyan-300 border-cyan-700';
 }
 
-export default function WarehouseClient({ initialStats, isAdmin, userBranch }: Props) {
+export default function WarehouseClient({ initialStats, isAdmin, userBranch, userName, userRole }: Props) {
   const [stats, setStats] = useState<BranchStats[]>(initialStats);
   const [selectedBranch, setSelectedBranch] = useState<string>(
     isAdmin ? '' : (userBranch ?? '')
@@ -97,6 +100,8 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch }: P
   const displayedBranch = selectedBranch || 'All Branches';
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
 
@@ -288,5 +293,6 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch }: P
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../../src/components/nav/TopNav';
 import type { DeliveryReportPayload, DeliveryReportRow } from '../../api/ops/delivery-reporting/route';
 
 interface Props {
   isAdmin: boolean;
   userBranch: string | null;
+  userName: string | null;
+  userRole?: string;
 }
 
 const WINDOWS = ['7d', '30d', '90d'] as const;
@@ -24,7 +27,7 @@ function exportCsv(detail: DeliveryReportRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) {
+export default function DeliveryReportingClient({ isAdmin, userBranch, userName, userRole }: Props) {
   const [windowParam, setWindowParam] = useState<'7d' | '30d' | '90d'>('30d');
   const [saleType, setSaleType] = useState('all');
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
@@ -57,6 +60,8 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
   const maxCount = data ? Math.max(...data.by_date.map((r) => r.count), 1) : 1;
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto space-y-5">
 
@@ -214,5 +219,6 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
 
       </div>
     </div>
+    </>
   );
 }

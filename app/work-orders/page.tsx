@@ -27,6 +27,8 @@ export default async function WorkOrdersPage() {
       isAdmin={isAdmin}
       userBranch={session!.user.branch ?? null}
       builders={builders}
+      userName={session!.user.name ?? null}
+      userRole={session!.user.role}
     />
   );
 }

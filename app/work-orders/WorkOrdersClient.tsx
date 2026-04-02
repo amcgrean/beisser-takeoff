@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenWorkOrder } from '../api/work-orders/open/route';
 
 interface Builder {
@@ -14,6 +15,8 @@ interface Props {
   isAdmin: boolean;
   userBranch: string | null;
   builders: Builder[];
+  userName: string | null;
+  userRole?: string;
 }
 
 type Tab = 'board' | 'search' | 'assigned';
@@ -51,7 +54,7 @@ interface Assignment {
   notes: string | null;
 }
 
-export default function WorkOrdersClient({ isAdmin, userBranch, builders }: Props) {
+export default function WorkOrdersClient({ isAdmin, userBranch, builders, userName, userRole }: Props) {
   const [tab, setTab] = useState<Tab>('board');
 
   // Board state
@@ -168,6 +171,8 @@ export default function WorkOrdersClient({ isAdmin, userBranch, builders }: Prop
   const branches = [...new Set(workOrders.map((w) => w.branch_code).filter(Boolean))].sort();
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-5">
 
@@ -503,5 +508,6 @@ export default function WorkOrdersClient({ isAdmin, userBranch, builders }: Prop
         )}
       </div>
     </div>
+    </>
   );
 }

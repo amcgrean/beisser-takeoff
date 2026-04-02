@@ -7,5 +7,12 @@ export default async function OpsDeliveryReportingPage() {
     session!.user.role === 'admin' ||
     (session!.user.roles ?? []).some((r) => ['admin', 'supervisor', 'ops'].includes(r));
 
-  return <DeliveryReportingClient isAdmin={isAdmin} userBranch={session!.user.branch ?? null} />;
+  return (
+    <DeliveryReportingClient
+      isAdmin={isAdmin}
+      userBranch={session!.user.branch ?? null}
+      userName={session!.user.name ?? null}
+      userRole={session!.user.role}
+    />
+  );
 }

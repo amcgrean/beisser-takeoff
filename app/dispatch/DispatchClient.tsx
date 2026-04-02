@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryStop } from '../api/dispatch/deliveries/route';
 
 interface DispatchRoute {
@@ -18,6 +19,8 @@ interface DispatchRoute {
 interface Props {
   isAdmin: boolean;
   userBranch: string | null;
+  userName: string | null;
+  userRole?: string;
 }
 
 type Tab = 'board' | 'routes';
@@ -42,7 +45,7 @@ function statusBadge(flag: string) {
 
 const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 
-export default function DispatchClient({ isAdmin, userBranch }: Props) {
+export default function DispatchClient({ isAdmin, userBranch, userName, userRole }: Props) {
   const [tab, setTab] = useState<Tab>('board');
   const today = new Date().toISOString().slice(0, 10);
 
@@ -128,6 +131,8 @@ export default function DispatchClient({ isAdmin, userBranch }: Props) {
   });
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-5">
 
@@ -391,5 +396,6 @@ export default function DispatchClient({ isAdmin, userBranch }: Props) {
         )}
       </div>
     </div>
+    </>
   );
 }

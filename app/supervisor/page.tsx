@@ -11,6 +11,7 @@ export default async function SupervisorPage() {
     <SupervisorClient
       isAdmin={isAdmin}
       userName={session!.user.name ?? null}
+      userRole={session!.user.role}
     />
   );
 }

@@ -12,6 +12,7 @@ export default async function DeliveryPage() {
       isAdmin={isAdmin}
       userBranch={session!.user.branch ?? null}
       userName={session!.user.name ?? null}
+      userRole={session!.user.role}
     />
   );
 }

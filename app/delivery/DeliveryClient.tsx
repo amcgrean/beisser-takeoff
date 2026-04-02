@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryRecord } from '../api/delivery/tracker/route';
 
 interface Props {
   isAdmin: boolean;
   userBranch: string | null;
   userName: string | null;
+  userRole?: string;
 }
 
 interface Vehicle {
@@ -41,7 +43,7 @@ function statusBadge(label: string) {
   );
 }
 
-export default function DeliveryClient({ isAdmin, userBranch, userName }: Props) {
+export default function DeliveryClient({ isAdmin, userBranch, userName, userRole }: Props) {
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
@@ -111,6 +113,8 @@ export default function DeliveryClient({ isAdmin, userBranch, userName }: Props)
   }, {});
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-5">
 
@@ -269,5 +273,6 @@ export default function DeliveryClient({ isAdmin, userBranch, userName }: Props)
 
       </div>
     </div>
+    </>
   );
 }

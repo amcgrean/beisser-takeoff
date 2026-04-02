@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { PickerStatus, RecentPick } from '../api/supervisor/pickers/route';
 
 interface Props {
   isAdmin: boolean;
   userName: string | null;
+  userRole?: string;
 }
 
 const STATUS_CONFIG = {
@@ -14,7 +16,7 @@ const STATUS_CONFIG = {
   idle:     { label: 'IDLE',     color: 'bg-gray-800/80 text-gray-400 border-gray-600' },
 };
 
-export default function SupervisorClient({ isAdmin, userName }: Props) {
+export default function SupervisorClient({ isAdmin, userName, userRole }: Props) {
   const [pickers, setPickers] = useState<PickerStatus[]>([]);
   const [recentPicks, setRecentPicks] = useState<RecentPick[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,6 +51,8 @@ export default function SupervisorClient({ isAdmin, userName }: Props) {
   const idle = pickers.filter((p) => p.status === 'idle');
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-6xl mx-auto space-y-6">
 
@@ -173,5 +177,6 @@ export default function SupervisorClient({ isAdmin, userName }: Props) {
 
       </div>
     </div>
+    </>
   );
 }

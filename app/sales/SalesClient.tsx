@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { TopNav } from '../../src/components/nav/TopNav';
 import type { SalesOrder } from '../api/sales/orders/route';
 
 interface Metrics {
@@ -15,6 +16,7 @@ interface Props {
   isAdmin: boolean;
   userBranch: string | null;
   userName: string | null;
+  userRole?: string;
 }
 
 type Tab = 'hub' | 'orders';
@@ -32,7 +34,7 @@ const SO_STATUS: Record<string, { label: string; color: string }> = {
 const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 const PERIODS = [7, 30, 90];
 
-export default function SalesClient({ isAdmin, userBranch, userName }: Props) {
+export default function SalesClient({ isAdmin, userBranch, userName, userRole }: Props) {
   const [tab, setTab] = useState<Tab>('hub');
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
   const [period, setPeriod] = useState(30);
@@ -99,6 +101,8 @@ export default function SalesClient({ isAdmin, userBranch, userName }: Props) {
   }
 
   return (
+    <>
+    <TopNav userName={userName} userRole={userRole} />
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-7xl mx-auto space-y-5">
 
@@ -331,5 +335,6 @@ export default function SalesClient({ isAdmin, userBranch, userName }: Props) {
         )}
       </div>
     </div>
+    </>
   );
 }

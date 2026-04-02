@@ -12,6 +12,7 @@ export default async function SalesPage() {
       isAdmin={isAdmin}
       userBranch={session!.user.branch ?? null}
       userName={session!.user.name ?? null}
+      userRole={session!.user.role}
     />
   );
 }

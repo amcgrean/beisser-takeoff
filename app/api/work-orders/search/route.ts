@@ -11,6 +11,11 @@ export async function GET(req: NextRequest) {
   const so = (req.nextUrl.searchParams.get('so') ?? '').trim().replace(/^0+/, '');
   if (!so) return NextResponse.json({ error: 'so parameter required' }, { status: 400 });
 
+  const isAdmin =
+    session.user.role === 'admin' ||
+    (session.user.roles ?? []).some((r) => ['admin', 'supervisor', 'ops'].includes(r));
+  const effectiveBranch = isAdmin ? '' : (session.user.branch ?? '');
+
   try {
     const sql = getErpSql();
 
@@ -21,6 +26,7 @@ export async function GET(req: NextRequest) {
       description: string | null;
       wo_status: string;
       handling_code: string | null;
+      so_branch: string | null;
       assignment_id: number | null;
       assigned_to_id: number | null;
       assigned_to_name: string | null;
@@ -35,6 +41,7 @@ export async function GET(req: NextRequest) {
         COALESCE(i.description, sod_item.description)  AS description,
         wh.wo_status,
         COALESCE(ib.handling_code, NULLIF(wh.department,''), wh.wo_rule) AS handling_code,
+        soh.system_id  AS so_branch,
         wa.id          AS assignment_id,
         wa.assigned_to_id,
         ps.name        AS assigned_to_name,
@@ -46,9 +53,11 @@ export async function GET(req: NextRequest) {
         ON i.item_ptr = wh.item_ptr AND i.is_deleted = false
       LEFT JOIN erp_mirror_item sod_item
         ON sod_item.item_ptr = sod.item_ptr AND sod_item.is_deleted = false
+      LEFT JOIN erp_mirror_so_header soh
+        ON soh.so_id = wh.source_id AND soh.is_deleted = false
       LEFT JOIN erp_mirror_item_branch ib
         ON (ib.item_ptr = wh.item_ptr OR ib.item_ptr = sod.item_ptr)
-           AND ib.system_id = COALESCE(wh.branch_code, sod.system_id)
+           AND ib.system_id = COALESCE(wh.branch_code, soh.system_id)
            AND ib.is_deleted = false
       LEFT JOIN work_orders wa
         ON wa.work_order_number = wh.wo_id
@@ -57,6 +66,7 @@ export async function GET(req: NextRequest) {
       WHERE wh.is_deleted = false
         AND CAST(wh.source_id AS TEXT) = ${so}
         AND UPPER(COALESCE(wh.source, '')) = 'SO'
+        ${effectiveBranch ? sql`AND soh.system_id = ${effectiveBranch}` : sql``}
       ORDER BY wh.wo_id
     `;
 
@@ -67,6 +77,7 @@ export async function GET(req: NextRequest) {
       description: r.description,
       wo_status: r.wo_status,
       handling_code: r.handling_code,
+      branch_code: r.so_branch,
       assignment_id: r.assignment_id,
       assigned_to_id: r.assigned_to_id,
       assigned_to_name: r.assigned_to_name,

@@ -7,6 +7,11 @@ export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const isAdmin =
+    session.user.role === 'admin' ||
+    (session.user.roles ?? []).some((r) => ['admin', 'supervisor', 'ops'].includes(r));
+  const effectiveBranch = isAdmin ? '' : (session.user.branch ?? '');
+
   try {
     const sql = getErpSql();
 
@@ -25,18 +30,36 @@ export async function GET() {
       notes: string | null;
     };
 
-    const [builders, assignments] = await Promise.all([
-      sql<BuilderRow[]>`
-        SELECT id, name, user_type, branch_code FROM pickster ORDER BY name
-      `,
-      sql<AssignmentRow[]>`
-        SELECT wa.*, ps.name AS assigned_to_name
-        FROM work_orders wa
-        LEFT JOIN pickster ps ON ps.id = wa.assigned_to_id
-        WHERE wa.status IN ('Open', 'Assigned')
-        ORDER BY wa.created_at DESC
-      `,
-    ]);
+    const buildersQuery = effectiveBranch
+      ? sql<BuilderRow[]>`
+          SELECT id, name, user_type, branch_code FROM pickster
+          WHERE branch_code = ${effectiveBranch} OR branch_code IS NULL
+          ORDER BY name
+        `
+      : sql<BuilderRow[]>`
+          SELECT id, name, user_type, branch_code FROM pickster ORDER BY name
+        `;
+
+    const assignmentsQuery = effectiveBranch
+      ? sql<AssignmentRow[]>`
+          SELECT wa.*, ps.name AS assigned_to_name
+          FROM work_orders wa
+          LEFT JOIN pickster ps ON ps.id = wa.assigned_to_id
+          LEFT JOIN erp_mirror_wo_header wh ON wh.wo_id = wa.work_order_number AND wh.is_deleted = false
+          LEFT JOIN erp_mirror_so_header soh ON soh.so_id = wh.source_id AND soh.is_deleted = false
+          WHERE wa.status IN ('Open', 'Assigned')
+            AND soh.system_id = ${effectiveBranch}
+          ORDER BY wa.created_at DESC
+        `
+      : sql<AssignmentRow[]>`
+          SELECT wa.*, ps.name AS assigned_to_name
+          FROM work_orders wa
+          LEFT JOIN pickster ps ON ps.id = wa.assigned_to_id
+          WHERE wa.status IN ('Open', 'Assigned')
+          ORDER BY wa.created_at DESC
+        `;
+
+    const [builders, assignments] = await Promise.all([buildersQuery, assignmentsQuery]);
 
     return NextResponse.json({ builders, assignments });
   } catch (err) {

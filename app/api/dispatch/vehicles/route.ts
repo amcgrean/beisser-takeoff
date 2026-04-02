@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const now = Date.now() / 1000;
     if (_cache.data && now - _cache.ts < ttlSec) {
       const vehicles = filterVehicles(_cache.data, branchParam);
-      return NextResponse.json(vehicles);
+      return NextResponse.json({ vehicles });
     }
 
     const res = await fetch(`${SAMSARA_BASE}/fleet/vehicles/locations?limit=200`, {
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const payload = await res.json() as unknown;
     _cache = { ts: now, data: payload };
 
-    return NextResponse.json(filterVehicles(payload, branchParam));
+    return NextResponse.json({ vehicles: filterVehicles(payload, branchParam) });
   } catch (err) {
     console.error('[dispatch/vehicles GET]', err);
     return NextResponse.json({ error: 'Failed to fetch vehicle locations' }, { status: 500 });
@@ -90,7 +90,8 @@ function parseVehicleMap(): Record<string, string> {
     return Object.fromEntries(
       Object.entries(parsed).map(([k, v]) => [k.toUpperCase(), v.toUpperCase()])
     );
-  } catch {
+  } catch (err) {
+    console.error('[dispatch/vehicles] Failed to parse SAMSARA_VEHICLE_BRANCH_MAP:', err);
     return {};
   }
 }
