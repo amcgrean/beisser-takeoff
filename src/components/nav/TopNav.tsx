@@ -6,8 +6,7 @@ import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
   Hammer, LogOut, ChevronDown, Menu, X, Settings,
-  Truck, ShoppingCart, FileText, Ruler, Wrench, PackageCheck,
-  ClipboardCheck,
+  Truck, ShoppingCart, FileText, Wrench, PackageCheck,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -40,6 +39,7 @@ const DOMAINS: Domain[] = [
       { href: '/work-orders',             label: 'Work Orders' },
       { href: '/supervisor',              label: 'Supervisor' },
       { href: '/dispatch',                label: 'Dispatch Board' },
+      { href: '/dispatch/drivers',        label: 'Driver Roster' },
       { href: '/delivery',                label: 'Delivery Tracker' },
       { href: '/delivery/map',            label: 'Fleet Map' },
     ],
@@ -57,12 +57,13 @@ const DOMAINS: Domain[] = [
       { href: '/sales/history',       label: 'Purchase History' },
       { href: '/sales/products',      label: 'Products & Stock' },
       { href: '/sales/reports',       label: 'Reports' },
+      { href: '/sales/tracker',       label: 'Delivery Tracker' },
       { href: '/credits',             label: 'RMA Credits' },
     ],
   },
   {
     id: 'estimating',
-    label: 'Estimating',
+    label: 'Bids & Design',
     icon: <FileText className="w-4 h-4" />,
     dropdown: true,
     isActive: (p) =>
@@ -73,23 +74,16 @@ const DOMAINS: Domain[] = [
       p.startsWith('/all-bids') ||
       p.startsWith('/ewp') ||
       p.startsWith('/projects') ||
-      p.startsWith('/bids'),
+      p.startsWith('/bids') ||
+      p.startsWith('/designs'),
     links: [
       { href: '/estimating',  label: 'Estimating App' },
       { href: '/takeoff',     label: 'PDF Takeoff' },
       { href: '/legacy-bids', label: 'Bids' },
       { href: '/ewp',         label: 'EWP' },
       { href: '/projects',    label: 'Projects' },
+      { href: '/designs',     label: 'Design' },
     ],
-  },
-  {
-    id: 'design',
-    label: 'Design',
-    icon: <Ruler className="w-4 h-4" />,
-    dropdown: false,
-    href: '/designs',
-    isActive: (p) => p.startsWith('/designs'),
-    links: [],
   },
   {
     id: 'service',
@@ -106,27 +100,15 @@ const DOMAINS: Domain[] = [
     icon: <PackageCheck className="w-4 h-4" />,
     dropdown: true,
     isActive: (p) =>
-      ['/purchasing/workspace', '/purchasing/open-pos', '/purchasing/manage'].some(
-        (x) => p === x || p.startsWith(x + '/')
-      ),
-    links: [
-      { href: '/purchasing/workspace', label: 'Buyer Workspace' },
-      { href: '/purchasing/open-pos',  label: 'Open POs' },
-      { href: '/purchasing/manage',    label: 'Command Center' },
-    ],
-  },
-  {
-    id: 'receiving',
-    label: 'Receiving',
-    icon: <ClipboardCheck className="w-4 h-4" />,
-    dropdown: true,
-    isActive: (p) =>
       p === '/purchasing' ||
-      p.startsWith('/purchasing/review') ||
-      p.startsWith('/purchasing/pos'),
+      p.startsWith('/purchasing/'),
     links: [
-      { href: '/purchasing',         label: 'PO Check-In' },
-      { href: '/purchasing/review',  label: 'Review Queue' },
+      { href: '/purchasing/workspace',      label: 'Buyer Workspace' },
+      { href: '/purchasing/open-pos',       label: 'Open POs' },
+      { href: '/purchasing/suggested-buys', label: 'Suggested Buys' },
+      { href: '/purchasing/manage',         label: 'Command Center' },
+      { href: '/purchasing',                label: 'PO Check-In' },
+      { href: '/purchasing/review',         label: 'Review Queue' },
     ],
   },
 ];
@@ -141,6 +123,7 @@ const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/notifications',     label: 'Notifications' },
   { href: '/admin/audit',             label: 'Audit Log' },
   { href: '/admin/erp',               label: 'ERP Sync' },
+  { href: '/admin/app-users',         label: 'App Users' },
   { href: '/ops/delivery-reporting',  label: 'Delivery Report' },
   { href: '/warehouse/pickers',       label: 'Picker Admin' },
 ];

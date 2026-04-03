@@ -260,6 +260,7 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                       {isAdmin && <th className="px-4 py-2 text-left font-medium">Branch</th>}
                       <th className="px-4 py-2 text-left font-medium">Via</th>
                       <th className="px-4 py-2 text-left font-medium">Loaded</th>
+                      <th className="px-4 py-2 text-left font-medium">AR Bal</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -286,6 +287,13 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                           {d.loaded_date
                             ? `${new Date(d.loaded_date).toLocaleDateString()}${d.loaded_time ? ' ' + d.loaded_time : ''}`
                             : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                          {d.ar_balance != null
+                            ? <span className={d.ar_balance > 0 ? 'text-red-400 font-medium' : 'text-gray-500'}>
+                                ${d.ar_balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            : <span className="text-gray-600">—</span>}
                         </td>
                       </tr>
                     ))}

@@ -16,18 +16,11 @@ export interface DeliveryStop {
   reference: string | null;
   sale_type: string | null;
   customer_name: string | null;
+  cust_code: string | null;
   address_1: string | null;
   city: string | null;
+  ar_balance: number | null;
 }
-
-const DELIVERY_STATUS_LABELS: Record<string, string> = {
-  K: 'Picking',
-  P: 'Picked',
-  S: 'Staged',
-  D: 'Out for Delivery',
-  I: 'Invoiced',
-  C: 'Completed',
-};
 
 // GET /api/dispatch/deliveries?date=2026-04-02&branch=20GR
 export async function GET(req: NextRequest) {
@@ -44,7 +37,6 @@ export async function GET(req: NextRequest) {
 
   const effectiveBranch = isAdmin ? branchParam : (session.user.branch ?? '');
 
-  // Validate date
   const deliveryDate = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : new Date().toISOString().slice(0, 10);
 
   try {
@@ -64,8 +56,10 @@ export async function GET(req: NextRequest) {
       reference: string | null;
       sale_type: string | null;
       cust_name: string | null;
+      cust_code: string | null;
       address_1: string | null;
       city: string | null;
+      ar_balance: number | null;
     };
 
     const branchFilter = effectiveBranch
@@ -78,11 +72,18 @@ export async function GET(req: NextRequest) {
         sh.ship_date::text, sh.status_flag, sh.route_id_char, sh.driver,
         sh.ship_via, sh.loaded_date::text, sh.loaded_time,
         soh.reference, soh.sale_type,
-        soh.cust_name,
-        soh.shipto_address_1 AS address_1, soh.shipto_city AS city
+        soh.cust_name, soh.cust_code,
+        soh.shipto_address_1 AS address_1, soh.shipto_city AS city,
+        ar.open_amt AS ar_balance
       FROM agility_shipments sh
       JOIN agility_so_header soh
         ON soh.system_id = sh.system_id AND soh.so_id = sh.so_id AND soh.is_deleted = false
+      LEFT JOIN (
+        SELECT cust_key, SUM(open_amt) AS open_amt
+        FROM agility_ar_open
+        WHERE UPPER(COALESCE(open_flag, '')) = 'O'
+        GROUP BY cust_key
+      ) ar ON ar.cust_key = soh.cust_code
       WHERE sh.is_deleted = false
         ${branchFilter}
         AND CAST(sh.ship_date AS DATE) = ${deliveryDate}::date
@@ -103,8 +104,10 @@ export async function GET(req: NextRequest) {
       reference: r.reference?.trim() || null,
       sale_type: r.sale_type?.trim() || null,
       customer_name: r.cust_name?.trim() || null,
+      cust_code: r.cust_code?.trim() || null,
       address_1: r.address_1?.trim() || null,
       city: r.city?.trim() || null,
+      ar_balance: r.ar_balance != null ? Number(r.ar_balance) : null,
     }));
 
     return NextResponse.json(stops);
