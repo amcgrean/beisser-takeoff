@@ -3,7 +3,37 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
-import type { OrderDetail } from '../../api/sales/orders/[so_number]/route';
+interface OrderLine {
+  sequence: number;
+  item: string | null;
+  description: string | null;
+  size: string | null;
+  qty_ordered: number | null;
+  bo: number | null;
+  price: number | null;
+  uom: string | null;
+}
+
+interface OrderDetail {
+  so_number: string;
+  system_id: string;
+  so_status: string;
+  sale_type: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+  reference: string | null;
+  po_number: string | null;
+  expect_date: string | null;
+  created_date: string | null;
+  invoice_date: string | null;
+  ship_date: string | null;
+  promise_date: string | null;
+  ship_via: string | null;
+  terms: string | null;
+  salesperson: string | null;
+  branch_code: string | null;
+  lines: OrderLine[];
+}
 
 const SO_STATUS: Record<string, { label: string; color: string }> = {
   O: { label: 'Open',      color: 'bg-blue-900/60 text-blue-300 border-blue-700' },
