@@ -67,6 +67,8 @@ export default async function ReviewPage({
       days={days}
       isAdmin={isAdmin}
       availableBranches={availableBranches}
+      userName={session.user.name}
+      userRole={session.user.role}
     />
   );
 }

@@ -191,6 +191,28 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - **Review Detail** (`/purchasing/review/[id]`): photo viewer, reviewer notes, mark reviewed/flagged
 - **Auth**: OTP-based via `otp_codes` + `app_users` tables, `roles[]` array + `branch` in JWT
 
+#### Sales Sub-Pages (2026-04-02) — COMPLETE
+- **Customer Search** (`/sales/customers`): search `erp_mirror_cust`, link to profile. API: `/api/sales/customers`
+- **Customer Profile** (`/sales/customers/[code]`): details, 90-day orders, ship-to addresses. API: `/api/sales/customers/[code]`
+- **Customer Notes** (`/sales/customers/[code]` Notes tab): read/write from `public.customer_notes` table via `getErpSql()`. API: `/api/sales/customers/[code]/notes`
+- **Products & Stock** (`/sales/products`): search `erp_mirror_item` + `erp_mirror_item_branch`. API: `/api/sales/products`
+- **Purchase History** (`/sales/history`): orders with expanded filters (status, date range, branch). Reuses `/api/sales/orders`
+- **Sales Reports** (`/sales/reports`): KPI cards + status breakdown + top customers. Reuses `/api/sales/metrics`
+
+#### Purchasing Sub-Pages (2026-04-02) — COMPLETE
+- **Open POs** (`/purchasing/open-pos`): open PO list with overdue highlight. API: `/api/purchasing/pos/open` (uses `app_po_search` view)
+- **Buyer Workspace** (`/purchasing/workspace`): quick-action cards + upcoming POs + recent check-ins
+- **Command Center** (`/purchasing/manage`): KPI cards, POs by branch, overdue list, recent submissions
+
+#### RMA Credits (2026-04-02) — METADATA ONLY
+- **Credits Search** (`/credits`): search `public.credit_images` table by RMA# or email. API: `/api/credits`
+- Note: Images in `credit_images.filepath` are local WH-Tracker filesystem paths — not viewable in LiveEdge yet
+
+#### Nav Restructuring (2026-04-02) — COMPLETE
+- TopNav updated with dropdown submenus for Purchasing and Sales sections
+- Added RMA Credits flat link
+- `DropdownNav` sub-component handles click-outside, active state, keyboard-friendly toggle
+
 #### Flask Sunset — NOT STARTED
 - DNS routing, archive Flask app
 
@@ -203,10 +225,12 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - **WH-Tracker kiosk pick workflow**: floor kiosk pick flow not appropriate for LiveEdge web app pattern
 
 ## Pending Actions
-1. **Bug testing**: Users testing. Known risk areas: WH-Tracker public schema table access (`pick`, `pickster`, `pick_assignments`, `work_orders` tables), Samsara vehicle GPS
-2. **Purchasing command center data audit**: Confirm whether `app_purchasing_*` views exist in Supabase public schema before building command center / buyer workspace / suggested buys
-3. **Customer notes table**: Decide whether to create `customer_notes` table in `bids` schema or skip
-4. **Phase 6 Flask sunset**: DNS cutover, archive Flask app after testing confirms parity
+1. **Bug testing**: Users testing 2026-04-03. Known risk areas: WH-Tracker public schema table access (`pick`, `pickster`, `pick_assignments`, `work_orders` tables), Samsara vehicle GPS, new sales/customer/purchasing pages
+2. **Sales order detail page**: `/sales/orders/[so_number]` — line items from `erp_mirror_so_detail`, useful for sales reps looking up specific orders
+3. **Link customer names in SalesClient**: Orders tab in `/sales` (`SalesClient.tsx`) renders customer names as plain text — should link to `/sales/customers/[cust_code]` like `HistoryClient` already does
+4. **RMA Credits image pipeline**: Images should go to R2 (confirmed). `credit_images.filepath` currently holds WH-Tracker local paths. Plan: add `r2_key TEXT` column to `public.credit_images` → update `sync_email_credits.py` to upload to R2 → add `/api/credits/[id]/image` presigned URL route → update `CreditsClient.tsx` to show thumbnails. Metadata search at `/credits` is ready.
+5. **Purchasing Suggested Buys**: `/purchasing/suggested-buys` — WH-Tracker nav item not yet built. Verify `app_purchasing_queue` view exists: `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ILIKE 'app_purchasing%'`
+6. **Phase 6 Flask sunset**: DNS cutover, archive Flask app after testing confirms parity
 
 ## API Route Patterns
 - **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
@@ -256,10 +280,10 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - `SESSION_COOKIE_SECURE` — Secure flag on session cookie (`true` in prod, `false` in dev)
 
 ## Navigation Structure
-- **Top nav**: Dashboard, Bids, Designs, EWP, Projects, IT Issues, **Warehouse ▾**, Work Orders, Dispatch, **Delivery ▾**, **Sales ▾**, Supervisor, **Purchasing ▾**, Estimating, PDF Takeoff
+- **Top nav**: Dashboard, Bids, Designs, EWP, Projects, IT Issues, **Warehouse ▾**, Work Orders, Dispatch, **Delivery ▾**, **Sales ▾**, Supervisor, **Purchasing ▾**, RMA Credits, Estimating, PDF Takeoff
   - **Warehouse ▾**: Picks Board (`/warehouse`), Open Picks (`/warehouse/open-picks`), Picker Stats (`/warehouse/picker-stats`)
-  - **Sales ▾**: Sales Hub (`/sales`), Transactions (`/sales/transactions`), Purchase History (`/sales/history`), Products & Stock (`/sales/products`), Reports (`/sales/reports`)
-  - **Purchasing ▾**: PO Check-In (`/purchasing`), Open POs (`/purchasing/open-pos`), Review Queue (`/purchasing/review`)
+  - **Sales ▾**: Sales Hub (`/sales`), Customers (`/sales/customers`), Transactions (`/sales/transactions`), Purchase History (`/sales/history`), Products & Stock (`/sales/products`), Reports (`/sales/reports`)
+  - **Purchasing ▾**: PO Check-In (`/purchasing`), Open POs (`/purchasing/open-pos`), Review Queue (`/purchasing/review`), Buyer Workspace (`/purchasing/workspace`), Command Center (`/purchasing/manage`)
   - **Delivery ▾**: Delivery Tracker (`/delivery`), Fleet Map (`/delivery/map`)
 - **Admin dropdown** (admin role only): Dashboard, Customers, Products/SKUs, Formulas, Users, Bid Fields, Notifications, Audit Log, ERP Sync, PO Review, Delivery Report, **Picker Admin** (`/warehouse/pickers`)
 - Component: `src/components/nav/TopNav.tsx`

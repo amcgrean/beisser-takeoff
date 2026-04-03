@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PoSubmission } from '../../../db/schema';
+import { TopNav } from '../../../src/components/nav/TopNav';
 
 type Props = {
   submissions: PoSubmission[];
@@ -11,6 +12,8 @@ type Props = {
   days: number;
   isAdmin: boolean;
   availableBranches: string[];
+  userName?: string | null;
+  userRole?: string;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -26,6 +29,8 @@ export default function ReviewClient({
   days,
   isAdmin,
   availableBranches,
+  userName,
+  userRole,
 }: Props) {
   const router = useRouter();
   const [updating, setUpdating] = useState<string | null>(null);
@@ -56,8 +61,9 @@ export default function ReviewClient({
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="min-h-screen bg-gray-950 text-white">
+      <TopNav userName={userName} userRole={userRole} />
+      <div className="max-w-5xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-cyan-400">PO Submission Review</h1>
           <a href="/purchasing" className="text-sm text-cyan-400 hover:underline">+ New Check-In</a>

@@ -47,6 +47,7 @@ const NAV_LINKS = [
   { href: '/delivery',   label: 'Delivery',    icon: <MapPin className="w-4 h-4" /> },
   { href: '/sales',      label: 'Sales',       icon: <ShoppingCart className="w-4 h-4" /> },
   { href: '/supervisor', label: 'Supervisor',  icon: <Users className="w-4 h-4" /> },
+  { href: '/credits',    label: 'RMA Credits', icon: <FileText className="w-4 h-4" /> },
   { href: '/',           label: 'Estimating',  icon: <FileText className="w-4 h-4" /> },
   { href: '/takeoff',   label: 'PDF Takeoff', icon: <Hammer className="w-4 h-4" /> },
 ];
@@ -75,6 +76,7 @@ const WAREHOUSE_LINKS = [
 
 const SALES_LINKS = [
   { href: '/sales',               label: 'Sales Hub' },
+  { href: '/sales/customers',     label: 'Customers' },
   { href: '/sales/transactions',  label: 'Transactions' },
   { href: '/sales/history',       label: 'Purchase History' },
   { href: '/sales/products',      label: 'Products & Stock' },
@@ -82,9 +84,11 @@ const SALES_LINKS = [
 ];
 
 const PURCHASING_LINKS = [
-  { href: '/purchasing',           label: 'PO Check-In' },
-  { href: '/purchasing/open-pos',  label: 'Open POs' },
-  { href: '/purchasing/review',    label: 'Review Queue' },
+  { href: '/purchasing',             label: 'PO Check-In' },
+  { href: '/purchasing/open-pos',    label: 'Open POs' },
+  { href: '/purchasing/review',      label: 'Review Queue' },
+  { href: '/purchasing/workspace',   label: 'Buyer Workspace' },
+  { href: '/purchasing/manage',      label: 'Command Center' },
 ];
 
 const DELIVERY_LINKS = [

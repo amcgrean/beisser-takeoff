@@ -1,16 +1,28 @@
 import { auth } from '../../../../auth';
 import { redirect } from 'next/navigation';
-import CustomerClient from './CustomerClient';
+import { TopNav } from '../../../../src/components/nav/TopNav';
+import CustomerProfileClient from './CustomerProfileClient';
 
-export default async function CustomerPage({ params }: { params: Promise<{ code: string }> }) {
+type Props = { params: Promise<{ code: string }> };
+
+export async function generateMetadata({ params }: Props) {
+  const { code } = await params;
+  return { title: `Customer ${code}` };
+}
+
+export default async function CustomerProfilePage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
   const { code } = await params;
 
-  const isAdmin =
-    session.user.role === 'admin' ||
-    (session.user.roles ?? []).some((r) => ['admin', 'supervisor', 'ops', 'sales'].includes(r));
-
-  return <CustomerClient code={code} isAdmin={isAdmin} />;
+  return (
+    <div className="min-h-screen bg-gray-950">
+      <TopNav userName={session.user.name} userRole={session.user.role} />
+      <CustomerProfileClient
+        code={code.toUpperCase()}
+        userName={session.user.name ?? ''}
+      />
+    </div>
+  );
 }

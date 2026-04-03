@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   const statusParam = searchParams.get('status') ?? '';
   const branchParam = searchParams.get('branch') ?? '';
   const sinceParam = searchParams.get('since') ?? '';
+  const daysParam = parseInt(searchParams.get('days') ?? '0', 10) || 0;
 
   const isAdmin = session.user.role === 'admin' ||
     (session.user.roles ?? []).some((r) => ['supervisor', 'admin'].includes(r));
@@ -84,12 +85,15 @@ export async function GET(req: NextRequest) {
       conditions.push(eq(poSubmissions.branch, branchParam));
     }
 
-    if (statusParam) conditions.push(eq(poSubmissions.status, statusParam));
+    if (statusParam && statusParam !== 'all') conditions.push(eq(poSubmissions.status, statusParam));
     if (sinceParam) {
       try {
         const since = new Date(sinceParam);
         conditions.push(gt(poSubmissions.createdAt, since));
       } catch { /* ignore bad date */ }
+    } else if (daysParam > 0) {
+      const since = new Date(Date.now() - daysParam * 24 * 60 * 60 * 1000);
+      conditions.push(gt(poSubmissions.createdAt, since));
     }
 
     const rows = await db
