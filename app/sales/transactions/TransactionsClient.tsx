@@ -87,9 +87,7 @@ export default function TransactionsClient({ isAdmin, userBranch }: Props) {
     }
   }, []);
 
-  const triggerSearch = useCallback((overrides: Partial<typeof ({
-    q, status, dateFrom, dateTo, saleType, branch
-  })> = {}, newPage = 1) => {
+  const triggerSearch = useCallback((overrides: Record<string, string> = {}, newPage = 1) => {
     const opts = { q, status, dateFrom, dateTo, saleType, branch, ...overrides };
     setPage(newPage);
     fetchOrders({ ...opts, page: newPage });
