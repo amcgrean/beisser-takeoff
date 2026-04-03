@@ -80,10 +80,10 @@ export default function CustomerProfileClient({ code, userName }: { code: string
         if (!r.ok) throw new Error('Not found');
         return r.json();
       })
-      .then((d: { customer: Customer; orders: Order[]; shiptos: ShipTo[] }) => {
+      .then((d: { customer: Customer; open_orders: Order[]; history: Order[]; ship_to: ShipTo[] }) => {
         setCustomer(d.customer);
-        setOrders(d.orders);
-        setShiptos(d.shiptos);
+        setOrders([...(d.open_orders ?? []), ...(d.history ?? [])]);
+        setShiptos(d.ship_to ?? []);
       })
       .catch(() => setError('Customer not found or data unavailable.'))
       .finally(() => setLoading(false));
