@@ -4,6 +4,8 @@ import { getDb } from '../../../../db/index';
 import { getPresignedPdfUrl, deletePdf } from '@/lib/r2';
 import { sql } from 'drizzle-orm';
 
+type FileLookup = { id: string; file_name: string; r2_key: string; content_type: string; uploaded_by: number | null };
+
 // GET /api/files/[id] — get presigned download URL
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -14,15 +16,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const db = getDb();
     const rows = await db.execute(
-      sql`SELECT id::text, file_name, r2_key, content_type FROM bids.files WHERE id = ${id}::uuid`
-    );
+      sql`SELECT id::text, file_name, r2_key, content_type, uploaded_by FROM bids.files WHERE id = ${id}::uuid`
+    ) as unknown as FileLookup[];
 
-    if (!rows.rows[0]) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
+    if (!rows[0]) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
 
-    const file = rows.rows[0] as { id: string; file_name: string; r2_key: string; content_type: string };
-    const url = await getPresignedPdfUrl(file.r2_key);
-
-    return NextResponse.json({ url, file_name: file.file_name, content_type: file.content_type });
+    const url = await getPresignedPdfUrl(rows[0].r2_key);
+    return NextResponse.json({ url, file_name: rows[0].file_name, content_type: rows[0].content_type });
   } catch (err) {
     console.error('[api/files GET]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -39,22 +39,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     const db = getDb();
 
-    // Fetch before deleting so we can check ownership
-    const lookup = await db.execute(
+    const rows = await db.execute(
       sql`SELECT id::text, r2_key, uploaded_by FROM bids.files WHERE id = ${id}::uuid`
-    );
-    if (!lookup.rows[0]) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
+    ) as unknown as FileLookup[];
 
-    const file = lookup.rows[0] as { id: string; r2_key: string; uploaded_by: number | null };
+    if (!rows[0]) return NextResponse.json({ error: 'File not found.' }, { status: 404 });
 
     const isAdmin = session.user.role === 'admin';
-    const isOwner = file.uploaded_by != null && String(file.uploaded_by) === String(session.user.id);
+    const isOwner = rows[0].uploaded_by != null && String(rows[0].uploaded_by) === String(session.user.id);
     if (!isAdmin && !isOwner) {
       return NextResponse.json({ error: 'Forbidden.' }, { status: 403 });
     }
 
     await db.execute(sql`DELETE FROM bids.files WHERE id = ${id}::uuid`);
-    try { await deletePdf(file.r2_key); } catch { /* R2 object may already be gone */ }
+    try { await deletePdf(rows[0].r2_key); } catch { /* R2 object may already be gone */ }
 
     return NextResponse.json({ ok: true });
   } catch (err) {

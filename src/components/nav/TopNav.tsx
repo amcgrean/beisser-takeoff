@@ -29,7 +29,7 @@ const DOMAINS: Domain[] = [
     icon: <Truck className="w-4 h-4" />,
     dropdown: true,
     isActive: (p) =>
-      ['/warehouse', '/work-orders', '/dispatch', '/delivery', '/supervisor'].some(
+      ['/warehouse', '/work-orders', '/dispatch', '/delivery', '/supervisor', '/tv', '/kiosk'].some(
         (prefix) => p === prefix || p.startsWith(prefix + '/')
       ),
     links: [
@@ -42,6 +42,7 @@ const DOMAINS: Domain[] = [
       { href: '/dispatch/drivers',        label: 'Driver Roster' },
       { href: '/delivery',                label: 'Delivery Tracker' },
       { href: '/delivery/map',            label: 'Fleet Map' },
+      { href: '/tv/20GR',                label: 'TV Board' },
     ],
   },
   {
