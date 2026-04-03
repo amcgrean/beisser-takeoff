@@ -4,6 +4,106 @@ import { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryStop } from '../api/dispatch/deliveries/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { ChevronDown, ChevronRight, Clock, Truck, AlertCircle } from 'lucide-react';
+
+type TimelineEvent = { label: string; time: string | null; detail?: string };
+type TimelineData = {
+  events: TimelineEvent[];
+  ar: { balance: number | null; open_count: number };
+  so: { reference: string | null; sale_type: string | null; expect_date: string | null; shipto_address_1: string | null; shipto_city: string | null };
+};
+
+function StopTimeline({ soNumber }: { soNumber: string }) {
+  const [data, setData] = useState<TimelineData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/dispatch/orders/${encodeURIComponent(soNumber)}/timeline`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: TimelineData | null) => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [soNumber]);
+
+  if (loading) return <div className="py-2 text-xs text-gray-500">Loading timeline…</div>;
+  if (!data) return <div className="py-2 text-xs text-red-400">Could not load timeline.</div>;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-950/60">
+      {/* Timeline */}
+      <div>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+          <Clock className="w-3.5 h-3.5" /> Order Timeline
+        </div>
+        {data.events.length === 0 ? (
+          <p className="text-xs text-gray-600">No timeline events yet.</p>
+        ) : (
+          <ol className="relative border-l border-gray-700 ml-2 space-y-3">
+            {data.events.map((ev, i) => (
+              <li key={i} className="pl-4">
+                <span className="absolute -left-1 w-2 h-2 rounded-full bg-cyan-500 mt-0.5" />
+                <div className="text-xs font-medium text-gray-200">{ev.label}</div>
+                {ev.time && (
+                  <div className="text-xs text-gray-500">{new Date(ev.time).toLocaleString()}</div>
+                )}
+                {ev.detail && <div className="text-xs text-gray-500 italic">{ev.detail}</div>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* AR + delivery info */}
+      <div className="space-y-3">
+        {/* AR balance */}
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+            <AlertCircle className="w-3.5 h-3.5" /> AR Balance
+          </div>
+          {data.ar.balance != null ? (
+            <div className={`text-sm font-bold ${data.ar.balance > 0 ? 'text-red-400' : 'text-green-400'}`}>
+              ${data.ar.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {data.ar.open_count > 0 && (
+                <span className="ml-1.5 text-xs font-normal text-gray-500">({data.ar.open_count} open items)</span>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-green-400">Current — no open balance</div>
+          )}
+        </div>
+
+        {/* Delivery details */}
+        <div>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
+            <Truck className="w-3.5 h-3.5" /> Details
+          </div>
+          <dl className="space-y-1 text-xs">
+            {data.so.expect_date && (
+              <div className="flex gap-2">
+                <dt className="text-gray-500 w-20 shrink-0">Expected</dt>
+                <dd className="text-gray-300">{new Date(data.so.expect_date).toLocaleDateString()}</dd>
+              </div>
+            )}
+            {data.so.sale_type && (
+              <div className="flex gap-2">
+                <dt className="text-gray-500 w-20 shrink-0">Sale Type</dt>
+                <dd className="text-gray-300 uppercase">{data.so.sale_type}</dd>
+              </div>
+            )}
+            {(data.so.shipto_address_1 || data.so.shipto_city) && (
+              <div className="flex gap-2">
+                <dt className="text-gray-500 w-20 shrink-0">Ship To</dt>
+                <dd className="text-gray-300">
+                  {[data.so.shipto_address_1, data.so.shipto_city].filter(Boolean).join(', ')}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface DispatchRoute {
   id: number;
@@ -67,6 +167,9 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [groupBy, setGroupBy] = useState<'route' | 'status' | 'branch'>('route');
+
+  // Expanded stop
+  const [expandedStop, setExpandedStop] = useState<string | null>(null);
 
   // Routes state
   const [routes, setRoutes] = useState<DispatchRoute[]>([]);
@@ -264,6 +367,7 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-700">
+                      <th className="px-4 py-2 text-left font-medium w-6"></th>
                       <th className="px-4 py-2 text-left font-medium">SO #</th>
                       <th className="px-4 py-2 text-left font-medium">Customer</th>
                       <th className="px-4 py-2 text-left font-medium">Address</th>
@@ -275,39 +379,58 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                     </tr>
                   </thead>
                   <tbody>
-                    {grouped[key].map((d) => (
-                      <tr
-                        key={`${d.system_id}|${d.so_id}|${d.shipment_num}`}
-                        className="border-b border-gray-800 hover:bg-gray-800/40 transition-colors"
-                      >
-                        <td className="px-4 py-2.5 font-mono text-cyan-300 whitespace-nowrap">
-                          {d.so_id}
-                          {d.shipment_num > 1 && <span className="text-gray-500 text-xs ml-1">#{d.shipment_num}</span>}
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-200 max-w-[200px]">
-                          <div className="truncate">{d.customer_name ?? '—'}</div>
-                          {d.reference && <div className="text-xs text-gray-500 truncate">{d.reference}</div>}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[180px]">
-                          {d.city ?? d.address_1 ?? '—'}
-                        </td>
-                        <td className="px-4 py-2.5">{statusBadge(d.status_flag)}</td>
-                        {isAdmin && <td className="px-4 py-2.5 text-xs text-gray-500">{d.system_id}</td>}
-                        <td className="px-4 py-2.5 text-xs text-gray-400">{d.ship_via || '—'}</td>
-                        <td className="px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                          {d.loaded_date
-                            ? `${new Date(d.loaded_date).toLocaleDateString()}${d.loaded_time ? ' ' + d.loaded_time : ''}`
-                            : '—'}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs whitespace-nowrap">
-                          {d.ar_balance != null
-                            ? <span className={d.ar_balance > 0 ? 'text-red-400 font-medium' : 'text-gray-500'}>
-                                ${d.ar_balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </span>
-                            : <span className="text-gray-600">—</span>}
-                        </td>
-                      </tr>
-                    ))}
+                    {grouped[key].map((d) => {
+                      const stopKey = `${d.system_id}|${d.so_id}|${d.shipment_num}`;
+                      const isExpanded = expandedStop === stopKey;
+                      return (
+                        <>
+                          <tr
+                            key={stopKey}
+                            onClick={() => setExpandedStop(isExpanded ? null : stopKey)}
+                            className="border-b border-gray-800 hover:bg-gray-800/40 transition-colors cursor-pointer"
+                          >
+                            <td className="px-3 py-2.5 text-gray-600">
+                              {isExpanded
+                                ? <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                                : <ChevronRight className="w-3.5 h-3.5" />}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-cyan-300 whitespace-nowrap">
+                              {d.so_id}
+                              {d.shipment_num > 1 && <span className="text-gray-500 text-xs ml-1">#{d.shipment_num}</span>}
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-200 max-w-[200px]">
+                              <div className="truncate">{d.customer_name ?? '—'}</div>
+                              {d.reference && <div className="text-xs text-gray-500 truncate">{d.reference}</div>}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[180px]">
+                              {d.city ?? d.address_1 ?? '—'}
+                            </td>
+                            <td className="px-4 py-2.5">{statusBadge(d.status_flag)}</td>
+                            {isAdmin && <td className="px-4 py-2.5 text-xs text-gray-500">{d.system_id}</td>}
+                            <td className="px-4 py-2.5 text-xs text-gray-400">{d.ship_via || '—'}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                              {d.loaded_date
+                                ? `${new Date(d.loaded_date).toLocaleDateString()}${d.loaded_time ? ' ' + d.loaded_time : ''}`
+                                : '—'}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                              {d.ar_balance != null
+                                ? <span className={d.ar_balance > 0 ? 'text-red-400 font-medium' : 'text-gray-500'}>
+                                    ${d.ar_balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                : <span className="text-gray-600">—</span>}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={`${stopKey}-detail`} className="border-b border-gray-800 bg-gray-900/50">
+                              <td colSpan={isAdmin ? 9 : 8} className="p-0">
+                                <StopTimeline soNumber={d.so_id} />
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

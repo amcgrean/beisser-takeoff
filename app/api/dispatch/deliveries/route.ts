@@ -8,6 +8,7 @@ export interface DeliveryStop {
   system_id: string;
   ship_date: string;
   status_flag: string;
+  so_status: string | null;
   route_id_char: string | null;
   driver: string | null;
   ship_via: string | null;
@@ -19,6 +20,7 @@ export interface DeliveryStop {
   cust_code: string | null;
   address_1: string | null;
   city: string | null;
+  expect_date: string | null;
   ar_balance: number | null;
 }
 
@@ -48,6 +50,7 @@ export async function GET(req: NextRequest) {
       system_id: string;
       ship_date: string;
       status_flag: string | null;
+      so_status: string | null;
       route_id_char: string | null;
       driver: string | null;
       ship_via: string | null;
@@ -59,6 +62,7 @@ export async function GET(req: NextRequest) {
       cust_code: string | null;
       address_1: string | null;
       city: string | null;
+      expect_date: string | null;
       ar_balance: number | null;
     };
 
@@ -71,31 +75,34 @@ export async function GET(req: NextRequest) {
         sh.so_id, sh.shipment_num, sh.system_id,
         sh.ship_date::text, sh.status_flag, sh.route_id_char, sh.driver,
         sh.ship_via, sh.loaded_date::text, sh.loaded_time,
-        soh.reference, soh.sale_type,
+        soh.so_status, soh.reference, soh.sale_type,
         soh.cust_name, soh.cust_code,
         soh.shipto_address_1 AS address_1, soh.shipto_city AS city,
+        soh.expect_date::text,
         ar.open_amt AS ar_balance
       FROM agility_shipments sh
       JOIN agility_so_header soh
         ON soh.system_id = sh.system_id AND soh.so_id = sh.so_id AND soh.is_deleted = false
       LEFT JOIN (
-        SELECT cust_key, SUM(open_amt) AS open_amt
-        FROM agility_ar_open
-        WHERE UPPER(COALESCE(open_flag, '')) = 'O'
-        GROUP BY cust_key
-      ) ar ON ar.cust_key = soh.cust_code
+        SELECT ac.cust_code, SUM(ar.open_amt) AS open_amt
+        FROM agility_ar_open ar
+        JOIN agility_customers ac ON ac.cust_key = ar.cust_key AND ac.is_deleted = false
+        WHERE ar.open_flag = true AND ar.is_deleted = false
+        GROUP BY ac.cust_code
+      ) ar ON TRIM(ar.cust_code) = TRIM(soh.cust_code)
       WHERE sh.is_deleted = false
         ${branchFilter}
         AND CAST(sh.ship_date AS DATE) = ${deliveryDate}::date
       ORDER BY sh.system_id, sh.route_id_char NULLS LAST, sh.so_id
     `;
 
-    const stops: DeliveryStop[] = rows.map((r) => ({
+    const stops: DeliveryStop[] = rows.map((r: RawRow) => ({
       so_id: r.so_id,
       shipment_num: r.shipment_num,
       system_id: r.system_id,
       ship_date: r.ship_date,
       status_flag: r.status_flag ?? '',
+      so_status: r.so_status?.trim() || null,
       route_id_char: r.route_id_char?.trim() || null,
       driver: r.driver?.trim() || null,
       ship_via: r.ship_via?.trim() || null,
@@ -107,6 +114,7 @@ export async function GET(req: NextRequest) {
       cust_code: r.cust_code?.trim() || null,
       address_1: r.address_1?.trim() || null,
       city: r.city?.trim() || null,
+      expect_date: r.expect_date,
       ar_balance: r.ar_balance != null ? Number(r.ar_balance) : null,
     }));
 
