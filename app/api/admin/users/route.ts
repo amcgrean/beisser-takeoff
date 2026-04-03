@@ -86,8 +86,17 @@ export async function POST(req: NextRequest) {
   try {
     const db = getDb();
 
-    // Resolve a usertypeId — pick by matching name, fall back to first available
-    const allTypes = await db.select().from(legacyUserType);
+    // Resolve a usertypeId — seed defaults if table is empty, then match by role name
+    let allTypes = await db.select().from(legacyUserType);
+    if (allTypes.length === 0) {
+      // Seed the three standard types so the FK is satisfied
+      await db.insert(legacyUserType).values([
+        { name: 'admin' },
+        { name: 'estimator' },
+        { name: 'viewer' },
+      ]).onConflictDoNothing();
+      allTypes = await db.select().from(legacyUserType);
+    }
     let usertypeId = allTypes[0]?.id ?? 1;
     const roleLabel = body.role === 'admin' ? 'admin' : body.role === 'estimator' ? 'estimat' : 'viewer';
     const match = allTypes.find((t) => t.name.toLowerCase().includes(roleLabel));

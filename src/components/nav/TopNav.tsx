@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import {
   Hammer, LogOut, ChevronDown, Menu, X, Settings,
-  Truck, ShoppingCart, FileText, Wrench, PackageCheck, MapPin,
+  Truck, ShoppingCart, FileText, Wrench, PackageCheck, MapPin, Search,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -99,6 +99,68 @@ function BranchSwitcher() {
             </button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function GlobalSearch() {
+  const router = useRouter();
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState('');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+    else setQ('');
+  }, [open]);
+
+  // Close on Escape
+  React.useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+      // Cmd/Ctrl+K to open
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setOpen((p) => !p);
+      }
+    }
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setOpen(false);
+    router.push(`/search?q=${encodeURIComponent(trimmed)}`);
+  }
+
+  return (
+    <div className="relative hidden sm:block">
+      {open ? (
+        <form onSubmit={submit} className="flex items-center">
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search…"
+            className="w-48 px-3 py-1.5 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+          />
+          <button type="button" onClick={() => setOpen(false)} className="ml-1 p-1.5 text-gray-500 hover:text-white">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </form>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition"
+          title="Search (Ctrl+K)"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span className="hidden md:inline text-gray-600 text-[10px] font-mono border border-gray-700 rounded px-1">⌘K</span>
+        </button>
       )}
     </div>
   );
@@ -408,6 +470,9 @@ export function TopNav({ userName, userRole }: Props) {
 
           {/* Right side */}
           <div className="flex items-center gap-2">
+            {/* Global search */}
+            <GlobalSearch />
+
             {/* Branch switcher */}
             <BranchSwitcher />
 
@@ -470,6 +535,16 @@ export function TopNav({ userName, userRole }: Props) {
           />
           <div className="relative mt-14 bg-slate-900 border-b border-white/10 shadow-xl overflow-y-auto max-h-[calc(100vh-3.5rem)]">
             <div className="px-4 py-3 space-y-0.5">
+              {/* Mobile search */}
+              <Link
+                href="/search"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <Search className="w-4 h-4" />
+                Search
+              </Link>
+              <div className="border-t border-slate-800 my-1" />
+
               {visibleDomains.map((domain) => (
                 <React.Fragment key={domain.id}>
                   <div className="pt-2 pb-0.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
