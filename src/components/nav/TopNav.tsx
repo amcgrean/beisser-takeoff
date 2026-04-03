@@ -208,6 +208,7 @@ const DOMAINS: Domain[] = [
       { href: '/purchasing/workspace',      label: 'Buyer Workspace',  requireAnyRole: ['purchasing', 'ops', 'supervisor'] },
       { href: '/purchasing/open-pos',       label: 'Open POs',         requireAnyRole: ['purchasing', 'ops', 'supervisor', 'sales'] },
       { href: '/purchasing/suggested-buys', label: 'Suggested Buys',   requireAnyRole: ['purchasing', 'ops', 'supervisor'] },
+      { href: '/purchasing/exceptions',     label: 'Exceptions',       requireAnyRole: ['purchasing', 'ops', 'supervisor'] },
       { href: '/purchasing/manage',         label: 'Command Center',   requireAnyRole: ['purchasing', 'ops', 'supervisor'] },
       { href: '/purchasing',                label: 'PO Check-In' },
       { href: '/purchasing/review',         label: 'Review Queue',     requireAnyRole: ['purchasing', 'ops', 'supervisor'] },
