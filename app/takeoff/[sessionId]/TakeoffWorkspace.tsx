@@ -444,6 +444,7 @@ export function TakeoffWorkspace({ sessionId }: Props) {
           showThumbnails={showThumbnails}
           onPageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
           onZoomChange={(zoom) => dispatch({ type: 'SET_ZOOM', payload: zoom })}
+          onZoomFit={() => dispatch({ type: 'SET_ZOOM', payload: 0 })}
           onToggleScrollMode={() => setScrollMode((m) => m === 'zoom' ? 'pan' : 'zoom')}
           onToggleThumbnails={() => setShowThumbnails((v) => !v)}
         />

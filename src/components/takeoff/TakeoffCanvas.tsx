@@ -74,6 +74,10 @@ export function TakeoffCanvas({
   const lastPanPointRef = useRef<{ x: number; y: number } | null>(null);
   const spaceHeldRef = useRef(false);
 
+  // Track the last zoom value applied BY the canvas itself (wheel/pinch),
+  // so we can distinguish external zoom changes (BottomBar buttons) from internal ones.
+  const lastCanvasZoomRef = useRef<number>(1);
+
   // Stable refs used by the ResizeObserver (avoids effect re-registration on page change)
   const prevPageRef = useRef<number>(state.currentPage);
   const currentPageRef = useRef<number>(state.currentPage);
@@ -223,6 +227,7 @@ export function TakeoffCanvas({
         const newZoom = Math.min(Math.max(currentZoom + delta, 0.1), 10);
         const rect = el.getBoundingClientRect();
         setCanvasZoom(fabricCanvas, newZoom, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+        lastCanvasZoomRef.current = newZoom;
         dispatch({ type: 'SET_ZOOM', payload: newZoom });
       } else {
         // Pan mode: Ctrl+scroll still zooms; plain scroll pans the canvas
@@ -233,6 +238,7 @@ export function TakeoffCanvas({
           const newZoom = Math.min(Math.max(currentZoom + delta, 0.1), 10);
           const rect = el.getBoundingClientRect();
           setCanvasZoom(fabricCanvas, newZoom, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+          lastCanvasZoomRef.current = newZoom;
           dispatch({ type: 'SET_ZOOM', payload: newZoom });
         } else {
           // Pan canvas by scroll amount
@@ -254,6 +260,42 @@ export function TakeoffCanvas({
       fabricCanvasEl?.removeEventListener('wheel', handleWheel);
     };
   }, [dispatch, scrollMode]);
+
+  // ── Sync external zoom changes (BottomBar buttons) to the Fabric canvas ──
+  useEffect(() => {
+    const fabricCanvas = fabricInstanceRef.current;
+    const container = containerRef.current;
+    if (!fabricCanvas || !container) return;
+
+    // zoom === 0 is the "fit to window" sentinel
+    if (state.zoom === 0) {
+      const containerW = container.clientWidth;
+      const containerH = container.clientHeight;
+      const pdfW = fabricCanvas.getWidth();
+      const pdfH = fabricCanvas.getHeight();
+      if (pdfW > 0 && pdfH > 0) {
+        const fitZoom = Math.min(containerW / pdfW, containerH / pdfH, 1) * 0.95;
+        const clampedFit = Math.max(0.05, Math.min(10, fitZoom));
+        // Reset viewport and center the page
+        fabricCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+        const offsetX = (containerW - pdfW * clampedFit) / 2;
+        const offsetY = (containerH - pdfH * clampedFit) / 2;
+        fabricCanvas.setViewportTransform([clampedFit, 0, 0, clampedFit, offsetX, offsetY]);
+        fabricCanvas.requestRenderAll();
+        lastCanvasZoomRef.current = clampedFit;
+        dispatch({ type: 'SET_ZOOM', payload: clampedFit });
+      }
+      return;
+    }
+
+    // Skip if this zoom value was already applied by the wheel handler
+    if (Math.abs(state.zoom - lastCanvasZoomRef.current) < 0.001) return;
+    lastCanvasZoomRef.current = state.zoom;
+    // Zoom to canvas center so the content stays visible
+    const w = fabricCanvas.getWidth();
+    const h = fabricCanvas.getHeight();
+    setCanvasZoom(fabricCanvas, state.zoom, { x: w / 2, y: h / 2 });
+  }, [state.zoom, dispatch]);
 
   // ── Keyboard handlers (space for pan, ctrl+z/y for undo/redo) ──
   useEffect(() => {

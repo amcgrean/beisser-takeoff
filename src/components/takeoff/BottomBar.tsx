@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import {
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
-  Layers, ScanLine,
+  Layers, ScanLine, Maximize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +15,7 @@ interface BottomBarProps {
   showThumbnails: boolean;
   onPageChange: (page: number) => void;
   onZoomChange: (zoom: number) => void;
+  onZoomFit: () => void;
   onToggleScrollMode: () => void;
   onToggleThumbnails: () => void;
 }
@@ -27,6 +28,7 @@ export function BottomBar({
   showThumbnails,
   onPageChange,
   onZoomChange,
+  onZoomFit,
   onToggleScrollMode,
   onToggleThumbnails,
 }: BottomBarProps) {
@@ -119,6 +121,13 @@ export function BottomBar({
           title="Zoom in"
         >
           <ZoomIn className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onZoomFit}
+          className="p-1 rounded text-slate-500 hover:text-white transition"
+          title="Fit page to window"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
         </button>
 
         <div className="w-px h-4 bg-slate-700 mx-1" />
