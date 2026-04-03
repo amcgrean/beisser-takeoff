@@ -209,20 +209,18 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - Note: Images in `credit_images.filepath` are local WH-Tracker filesystem paths — not viewable in LiveEdge yet
 
 #### Nav Restructuring (2026-04-02) — COMPLETE
-- TopNav updated with dropdown submenus for Purchasing and Sales sections
-- Added RMA Credits flat link
-- `DropdownNav` sub-component handles click-outside, active state, keyboard-friendly toggle
+- TopNav has per-domain dropdowns: Warehouse ▾, Sales ▾, Purchasing ▾, Delivery ▾
+- Each domain has separate `ref` + `open` state; click-outside closes; chevron rotates
+- Mobile drawer shows section headers + all sub-links per domain
+- RMA Credits added as flat top-level link
 
 #### Flask Sunset — NOT STARTED
 - DNS routing, archive Flask app
 
-#### Still Missing (deferred — needs investigation or lower priority)
-- **RMA Credits** (`/credits`): requires `CreditImage` table + email ingestion pipeline not in LiveEdge DB
-- **Purchasing Command Center** (`/purchasing/manage`): manager dashboard — depends on `app_purchasing_*` views being migrated
-- **Buyer Workspace** (`/purchasing/workspace`): buyer-level dashboard — same data dependency as command center
-- **Suggested Buys** (`/purchasing/suggested-buys`): purchasing recommendations — data source unclear
-- **Customer Notes** (`/sales/customers/[code]/notes`): CRUD notes per customer — `CustomerNote` table not migrated
-- **WH-Tracker kiosk pick workflow**: floor kiosk pick flow not appropriate for LiveEdge web app pattern
+#### Still Missing / Deferred
+- **Suggested Buys** (`/purchasing/suggested-buys`): verify `app_purchasing_queue` view exists first
+- **RMA Credits images**: `credit_images.filepath` holds local WH-Tracker paths — not R2 keys yet. Metadata search at `/credits` works. Image serving requires R2 pipeline (see Pending Actions)
+- **WH-Tracker kiosk pick workflow**: not appropriate for LiveEdge web app pattern
 
 ## Pending Actions
 1. **Bug testing**: Users testing 2026-04-03. Known risk areas: WH-Tracker public schema table access (`pick`, `pickster`, `pick_assignments`, `work_orders` tables), Samsara vehicle GPS, new sales/customer/purchasing pages
