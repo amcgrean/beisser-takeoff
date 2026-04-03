@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryRecord } from '../api/delivery/tracker/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Props {
   isAdmin: boolean;
@@ -44,6 +45,7 @@ function statusBadge(label: string) {
 }
 
 export default function DeliveryClient({ isAdmin, userBranch, userName, userRole }: Props) {
+  usePageTracking();
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));

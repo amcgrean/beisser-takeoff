@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PoSubmission } from '../../../db/schema';
 import { TopNav } from '../../../src/components/nav/TopNav';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Props = {
   submissions: PoSubmission[];
@@ -32,6 +33,7 @@ export default function ReviewClient({
   userName,
   userRole,
 }: Props) {
+  usePageTracking();
   const router = useRouter();
   const [updating, setUpdating] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);

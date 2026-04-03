@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, User, Activity, Clock } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface ActivePick {
   pick_id: number;
@@ -29,6 +30,7 @@ function minutesSince(iso: string | null) {
 }
 
 export default function OpenPicksClient({ isAdmin }: Props) {
+  usePageTracking();
   const [pickers, setPickers] = useState<PickerSummary[]>([]);
   const [loading, setLoading] = useState(true);
 

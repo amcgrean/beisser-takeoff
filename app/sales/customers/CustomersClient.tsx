@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Search, ExternalLink } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Customer = {
   cust_code: string;
@@ -17,6 +18,7 @@ type Customer = {
 const BRANCHES = ['', '10FD', '20GR', '25BW', '40CV'];
 
 export default function CustomersClient() {
+  usePageTracking();
   const [q, setQ] = useState('');
   const [branch, setBranch] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);

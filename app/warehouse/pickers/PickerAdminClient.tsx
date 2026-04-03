@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Picker {
   id: number;
@@ -13,6 +14,7 @@ interface Picker {
 const USER_TYPE_OPTIONS = ['picker', 'door_builder', 'supervisor', null];
 
 export default function PickerAdminClient() {
+  usePageTracking();
   const [pickers, setPickers] = useState<Picker[]>([]);
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<number | null>(null);

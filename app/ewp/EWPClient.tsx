@@ -5,6 +5,7 @@ import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { TopNav } from '../../src/components/nav/TopNav';
 import { Search, RefreshCw, Plus, ChevronLeft, ChevronRight, Upload, X, Download, AlertCircle, CheckCircle } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface EWPRow {
   id: number;
@@ -31,6 +32,7 @@ interface ImportResult {
 interface Props { session: Session; }
 
 export default function EWPClient({ session }: Props) {
+  usePageTracking();
   const [ewps, setEwps] = useState<EWPRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

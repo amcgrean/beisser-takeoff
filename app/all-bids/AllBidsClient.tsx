@@ -14,6 +14,7 @@ import {
   Building2,
   User,
 } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface UnifiedBid {
   id: string;
@@ -81,6 +82,7 @@ function sourceBadge(source: 'legacy' | 'estimator') {
 interface Props { session: Session; }
 
 export default function AllBidsClient({ session }: Props) {
+  usePageTracking();
   const [bids, setBids] = useState<UnifiedBid[]>([]);
   const [counts, setCounts] = useState<Counts>({ legacy: 0, estimator: 0, total: 0 });
   const [loading, setLoading] = useState(true);

@@ -5,6 +5,7 @@ import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { TopNav } from '../../src/components/nav/TopNav';
 import { Search, RefreshCw, Plus, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface DesignRow {
   id: number;
@@ -31,6 +32,7 @@ const STATUS_FILTERS = [
 interface Props { session: Session; }
 
 export default function DesignsClient({ session }: Props) {
+  usePageTracking();
   const [designs, setDesigns] = useState<DesignRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

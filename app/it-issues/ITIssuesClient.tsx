@@ -5,6 +5,7 @@ import type { Session } from 'next-auth';
 import Link from 'next/link';
 import { TopNav } from '../../src/components/nav/TopNav';
 import { Search, RefreshCw, Plus, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface ITIssue {
   id: number;
@@ -23,6 +24,7 @@ const ISSUE_TYPES = ['Hardware', 'Software', 'Network', 'Account', 'Other'];
 interface Props { session: Session; }
 
 export default function ITIssuesClient({ session }: Props) {
+  usePageTracking();
   const [issues, setIssues] = useState<ITIssue[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

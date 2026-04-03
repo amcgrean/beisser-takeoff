@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Search, FileImage, Mail, Calendar } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type CreditImage = {
   id: number; rma_number: string; filename: string; filepath: string;
@@ -15,6 +16,7 @@ type CreditGroup = {
 };
 
 export default function CreditsClient() {
+  usePageTracking();
   const [q, setQ] = useState('');
   const [credits, setCredits] = useState<CreditGroup[]>([]);
   const [loading, setLoading] = useState(false);

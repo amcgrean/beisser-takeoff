@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, MapPin, Truck, Navigation, Clock } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Vehicle {
   id: string;
@@ -32,6 +33,7 @@ function lastSeen(time: string | null): string {
 }
 
 export default function MapClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

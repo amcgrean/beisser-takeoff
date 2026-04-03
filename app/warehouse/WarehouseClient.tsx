@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenPickSummary } from '../api/warehouse/picks/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface BranchStats {
   system_id: string;
@@ -40,6 +41,7 @@ function handlingColor(code: string) {
 }
 
 export default function WarehouseClient({ initialStats, isAdmin, userBranch, userName, userRole }: Props) {
+  usePageTracking();
   const [stats, setStats] = useState<BranchStats[]>(initialStats);
   const [selectedBranch, setSelectedBranch] = useState<string>(
     isAdmin ? '' : (userBranch ?? '')

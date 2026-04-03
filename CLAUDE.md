@@ -208,27 +208,51 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - **Credits Search** (`/credits`): search `public.credit_images` table by RMA# or email. API: `/api/credits`
 - Note: Images in `credit_images.filepath` are local WH-Tracker filesystem paths — not viewable in LiveEdge yet
 
-#### Nav Restructuring (2026-04-02) — COMPLETE
-- TopNav has per-domain dropdowns: Warehouse ▾, Sales ▾, Purchasing ▾, Delivery ▾
-- Each domain has separate `ref` + `open` state; click-outside closes; chevron rotates
-- Mobile drawer shows section headers + all sub-links per domain
-- RMA Credits added as flat top-level link
+#### Nav Restructuring (2026-04-02) — COMPLETE, EXTENDED 2026-04-03
+- TopNav completely rewritten 2026-04-03 — 8 domain dropdowns replacing flat links + 4 domain dropdowns
+- Single `openMenu: string | null` state + single `<nav>` ref for click-outside (replaced per-domain refs)
+- **Dispatch ▾**: Picks Board, Open Picks, Picker Stats, Work Orders, Supervisor, Dispatch Board, Delivery Tracker, Fleet Map
+- **Sales ▾**: Sales Hub, Customers, Transactions, Purchase History, Products & Stock, Reports, RMA Credits
+- **Estimating ▾**: Estimating App (`/estimating`), PDF Takeoff, Bids, EWP, Projects
+- **Design** (direct link → `/designs`)
+- **Service** (direct link → `/it-issues`)
+- **Purchasing ▾**: Buyer Workspace, Open POs, Command Center
+- **Receiving ▾**: PO Check-In, Review Queue
+- **Admin ▾** (admin role only): all admin pages + delivery report + picker admin
+
+#### Personalized Homepage (2026-04-03) — COMPLETE
+- `/` is now the personalized dashboard (`HomeClient.tsx`); old TakeoffApp moved to `/estimating`
+- `/dashboard` redirects to `/`
+- Sections: greeting + date + branch, 5 KPI tiles, Quick Access strip (top pages), 8 module cards, recent activity
+- `GET /api/home` — aggregates open bids/designs (bids schema) + open picks/WOs/orders (ERP) + top pages
+- Page visit tracking: `POST /api/track-visit` upserts `bids.page_visits (user_id, path, visit_count)`
+- **`db/migrations/0004_page_visits.sql` must be applied manually in Supabase SQL editor**
+
+#### Sales Order Detail (2026-04-03) — COMPLETE
+- `GET /api/sales/orders/[so_number]` — header (joins `erp_mirror_cust`) + line items (joins `erp_mirror_item`)
+- `/sales/orders/[so_number]` — `OrderDetailClient.tsx`: header card, line items table, estimated total
+- SO numbers in SalesClient orders table now link here; customer names link to `/sales/customers/[code]`
 
 #### Flask Sunset — NOT STARTED
 - DNS routing, archive Flask app
 
 #### Still Missing / Deferred
-- **Suggested Buys** (`/purchasing/suggested-buys`): verify `app_purchasing_queue` view exists first
+- **Suggested Buys** (`/purchasing/suggested-buys`): `app_purchasing_queue` view confirmed missing. Check `erp_mirror_suggested_po_*` tables before building
 - **RMA Credits images**: `credit_images.filepath` holds local WH-Tracker paths — not R2 keys yet. Metadata search at `/credits` works. Image serving requires R2 pipeline (see Pending Actions)
-- **WH-Tracker kiosk pick workflow**: not appropriate for LiveEdge web app pattern
+- **WH-Tracker kiosk/TV/smart scan**: not appropriate for LiveEdge web app pattern — intentionally deferred
+- **Purchasing workflow** (tasks, approvals, exceptions, PO notes): verify `purchasing_tasks`, `purchasing_approvals`, etc. exist in `public` schema first
+- **Dispatch enrichment** (driver/truck mgmt, AR balance, order timeline per stop): WH-Tracker has these; LiveEdge dispatch shows basic stops only
+- **Sales delivery board** (`/sales/tracker`, `/sales/deliveries`): WH-Tracker had sales-rep-facing delivery views not yet ported
+- **Generic file management**: WH-Tracker's `files` + `file_versions` system not ported to LiveEdge
+- **WH-Tracker `app_users` admin**: separate from `bids."user"` — no LiveEdge UI for managing OTP auth users
 
 ## Pending Actions
-1. **Bug testing**: Users testing 2026-04-03. Known risk areas: WH-Tracker public schema table access (`pick`, `pickster`, `pick_assignments`, `work_orders` tables), Samsara vehicle GPS, new sales/customer/purchasing pages
-2. **Sales order detail page**: `/sales/orders/[so_number]` — line items from `erp_mirror_so_detail`, useful for sales reps looking up specific orders
-3. **Link customer names in SalesClient**: Orders tab in `/sales` (`SalesClient.tsx`) renders customer names as plain text — should link to `/sales/customers/[cust_code]` like `HistoryClient` already does
-4. **RMA Credits image pipeline**: Images should go to R2 (confirmed). `credit_images.filepath` currently holds WH-Tracker local paths. Plan: add `r2_key TEXT` column to `public.credit_images` → update `sync_email_credits.py` to upload to R2 → add `/api/credits/[id]/image` presigned URL route → update `CreditsClient.tsx` to show thumbnails. Metadata search at `/credits` is ready.
-5. **Purchasing Suggested Buys**: `/purchasing/suggested-buys` — WH-Tracker nav item not yet built. Verify `app_purchasing_queue` view exists: `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name ILIKE 'app_purchasing%'`
-6. **Phase 6 Flask sunset**: DNS cutover, archive Flask app after testing confirms parity
+1. **Apply page_visits migration**: Run `db/migrations/0004_page_visits.sql` in Supabase SQL editor to enable Quick Access tracking on homepage
+2. **Extend page tracking to module clients**: Add `POST /api/track-visit` call to each module's main client component (or extract a shared `usePageTracking` hook in `src/hooks/`) so Quick Access fills with real data
+3. **RMA Credits image pipeline**: `credit_images.filepath` holds WH-Tracker local paths. Plan: add `r2_key TEXT` column to `public.credit_images` (WH-Tracker Alembic migration) → update `sync_email_credits.py` to upload attachments to R2 → add `GET /api/credits/[id]/image` presigned URL route → update `CreditsClient.tsx` to show thumbnails
+4. **Purchasing workflow gaps**: Before building, verify tables exist: `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('purchasing_tasks','purchasing_approvals','purchasing_notes','purchasing_exceptions')` — if found, build PO notes API, exceptions view, approval workflow
+5. **Suggested Buys**: `app_purchasing_queue` confirmed missing. Check `erp_mirror_suggested_po_header` + `erp_mirror_suggested_po_detail` before building `/purchasing/suggested-buys`
+6. **Flask sunset**: DNS cutover + archive `C:\Users\amcgrean\python\wh-tracker-fly\WH-Tracker` after testing confirms parity
 
 ## API Route Patterns
 - **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
@@ -278,14 +302,18 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 - `SESSION_COOKIE_SECURE` — Secure flag on session cookie (`true` in prod, `false` in dev)
 
 ## Navigation Structure
-- **Top nav**: Dashboard, Bids, Designs, EWP, Projects, IT Issues, **Warehouse ▾**, Work Orders, Dispatch, **Delivery ▾**, **Sales ▾**, Supervisor, **Purchasing ▾**, RMA Credits, Estimating, PDF Takeoff
-  - **Warehouse ▾**: Picks Board (`/warehouse`), Open Picks (`/warehouse/open-picks`), Picker Stats (`/warehouse/picker-stats`)
-  - **Sales ▾**: Sales Hub (`/sales`), Customers (`/sales/customers`), Transactions (`/sales/transactions`), Purchase History (`/sales/history`), Products & Stock (`/sales/products`), Reports (`/sales/reports`)
-  - **Purchasing ▾**: PO Check-In (`/purchasing`), Open POs (`/purchasing/open-pos`), Review Queue (`/purchasing/review`), Buyer Workspace (`/purchasing/workspace`), Command Center (`/purchasing/manage`)
-  - **Delivery ▾**: Delivery Tracker (`/delivery`), Fleet Map (`/delivery/map`)
-- **Admin dropdown** (admin role only): Dashboard, Customers, Products/SKUs, Formulas, Users, Bid Fields, Notifications, Audit Log, ERP Sync, PO Review, Delivery Report, **Picker Admin** (`/warehouse/pickers`)
+8 top-level domain dropdowns (Design and Service are direct links, not dropdowns):
+- **Dispatch ▾**: Picks Board, Open Picks, Picker Stats, Work Orders, Supervisor, Dispatch Board, Delivery Tracker, Fleet Map
+- **Sales ▾**: Sales Hub, Customers, Transactions, Purchase History, Products & Stock, Reports, RMA Credits
+- **Estimating ▾**: Estimating App (`/estimating`), PDF Takeoff, Bids, EWP, Projects
+- **Design** (direct → `/designs`)
+- **Service** (direct → `/it-issues`)
+- **Purchasing ▾**: Buyer Workspace, Open POs, Command Center
+- **Receiving ▾**: PO Check-In, Review Queue
+- **Admin ▾** (admin role only): all admin pages + Delivery Report + Picker Admin
 - Component: `src/components/nav/TopNav.tsx`
-- Dropdown state managed per-domain with separate `ref` + `open` state; closes on outside click
+- Single `openMenu: string | null` state + one `<nav>` ref for click-outside (replaced per-domain refs)
+- `isActive()` per domain handles path prefix matching; Purchasing vs Receiving distinguished by specific path sets
 
 ## Key Conventions
 - Path alias: `@/*` → `./src/*`, `@/db/*` → `./db/*` (but API routes use relative paths for db imports)

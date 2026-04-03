@@ -22,6 +22,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { formatDateTime, STATUS_LABELS } from '../../src/lib/utils';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface BidRow {
   id: string;
@@ -48,6 +49,7 @@ const STATUS_FILTERS = [
 interface Props { session: Session; }
 
 export default function BidsListClient({ session }: Props) {
+  usePageTracking();
   const [bids, setBids] = useState<BidRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');

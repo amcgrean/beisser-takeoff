@@ -13,6 +13,7 @@ import {
   Filter,
   ArrowUpDown,
 } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface BidRow {
   id: number;
@@ -53,6 +54,7 @@ interface Props {
 }
 
 export default function LegacyBidsClient({ session }: Props) {
+  usePageTracking();
   const [bids, setBids] = useState<BidRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

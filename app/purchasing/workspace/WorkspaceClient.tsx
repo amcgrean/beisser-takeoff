@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PackageCheck, ClipboardCheck, List } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Po = {
   po_number: string;
@@ -24,6 +25,7 @@ type Submission = {
 };
 
 export default function WorkspaceClient({ userBranch }: { userBranch: string | null }) {
+  usePageTracking();
   const [pos, setPos] = useState<Po[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);

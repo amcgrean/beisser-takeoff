@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Po = {
   po_number: string;
@@ -20,6 +21,7 @@ type Submission = {
 const BRANCHES = ['', '10FD', '20GR', '25BW', '40CV'];
 
 export default function CommandCenterClient({ isAdmin }: { isAdmin: boolean }) {
+  usePageTracking();
   const [branch, setBranch] = useState('');
   const [pos, setPos] = useState<Po[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);

@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Search, RefreshCw, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Order {
   so_number: string;
@@ -44,6 +45,7 @@ interface Props {
 }
 
 export default function TransactionsClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);

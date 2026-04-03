@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type PoResult = {
   po_number: string;
@@ -21,6 +22,7 @@ type UploadedPhoto = { url: string; key: string };
 type Step = 'search' | 'photos' | 'confirm' | 'done';
 
 export default function CheckinClient() {
+  usePageTracking();
   const [step, setStep] = useState<Step>('search');
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PoResult[]>([]);

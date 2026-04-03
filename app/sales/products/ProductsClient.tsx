@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { Search, Package } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Product {
   item_number: string;
@@ -25,6 +26,7 @@ const HC_COLORS: Record<string, string> = {
 };
 
 export default function ProductsClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenWorkOrder } from '../api/work-orders/open/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Builder {
   id: number;
@@ -55,6 +56,7 @@ interface Assignment {
 }
 
 export default function WorkOrdersClient({ isAdmin, userBranch, builders, userName, userRole }: Props) {
+  usePageTracking();
   const [tab, setTab] = useState<Tab>('board');
 
   // Board state

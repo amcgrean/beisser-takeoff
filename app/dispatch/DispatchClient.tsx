@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryStop } from '../api/dispatch/deliveries/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface DispatchRoute {
   id: number;
@@ -46,6 +47,7 @@ function statusBadge(flag: string) {
 const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 
 export default function DispatchClient({ isAdmin, userBranch, userName, userRole }: Props) {
+  usePageTracking();
   const [tab, setTab] = useState<Tab>('board');
   const today = new Date().toISOString().slice(0, 10);
 

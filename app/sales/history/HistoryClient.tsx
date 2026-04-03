@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Search, RefreshCw, ExternalLink } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface HistoryOrder {
   so_number: string;
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export default function HistoryClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [orders, setOrders] = useState<HistoryOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);

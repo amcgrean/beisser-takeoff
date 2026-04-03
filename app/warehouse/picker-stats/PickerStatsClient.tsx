@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, BarChart2, Clock, TrendingUp } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface PickerStat {
   picker_id: number;
@@ -22,6 +23,7 @@ const PERIOD_OPTIONS = [
 ];
 
 export default function PickerStatsClient({ isAdmin }: Props) {
+  usePageTracking();
   const [stats, setStats] = useState<PickerStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);

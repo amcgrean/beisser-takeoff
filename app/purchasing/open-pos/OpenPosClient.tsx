@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Package, FileText, AlertCircle } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface OpenPO {
   po_number: string;
@@ -24,6 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
 interface Props { isAdmin: boolean; userBranch: string | null; }
 
 export default function OpenPosClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [pos, setPos] = useState<OpenPO[]>([]);
   const [loading, setLoading] = useState(true);
   const [branch, setBranch] = useState(userBranch ?? '');

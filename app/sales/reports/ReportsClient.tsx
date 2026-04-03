@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { BarChart2, RefreshCw, TrendingUp, Users, Truck } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface ReportsData {
   period_days: number;
@@ -37,6 +38,7 @@ function MiniBar({ value, max, color = 'bg-cyan-500' }: { value: number; max: nu
 }
 
 export default function ReportsClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [data, setData] = useState<ReportsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [period, setPeriod] = useState(30);

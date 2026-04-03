@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../../src/components/nav/TopNav';
 import type { DeliveryReportPayload, DeliveryReportRow } from '../../api/ops/delivery-reporting/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Props {
   isAdmin: boolean;
@@ -28,6 +29,7 @@ function exportCsv(detail: DeliveryReportRow[], filename: string) {
 }
 
 export default function DeliveryReportingClient({ isAdmin, userBranch, userName, userRole }: Props) {
+  usePageTracking();
   const [windowParam, setWindowParam] = useState<'7d' | '30d' | '90d'>('30d');
   const [saleType, setSaleType] = useState('all');
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));

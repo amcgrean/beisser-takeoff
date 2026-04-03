@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { SalesOrder } from '../api/sales/orders/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Metrics {
   open_orders_count: number;
@@ -35,6 +37,7 @@ const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 const PERIODS = [7, 30, 90];
 
 export default function SalesClient({ isAdmin, userBranch, userName, userRole }: Props) {
+  usePageTracking();
   const [tab, setTab] = useState<Tab>('hub');
   const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
   const [period, setPeriod] = useState(30);
@@ -295,9 +298,19 @@ export default function SalesClient({ isAdmin, userBranch, userName, userRole }:
                     <tbody>
                       {orders.map((o) => (
                         <tr key={`${o.system_id}|${o.so_number}`} className="border-b border-gray-800 hover:bg-gray-800/40 transition-colors">
-                          <td className="px-4 py-2.5 font-mono text-cyan-300 whitespace-nowrap">{o.so_number}</td>
+                          <td className="px-4 py-2.5 font-mono text-cyan-300 whitespace-nowrap">
+                            <Link href={`/sales/orders/${o.so_number}`} className="hover:underline">
+                              {o.so_number}
+                            </Link>
+                          </td>
                           <td className="px-4 py-2.5 text-gray-200 max-w-[200px]">
-                            <div className="truncate">{o.customer_name ?? '—'}</div>
+                            {o.customer_code ? (
+                              <Link href={`/sales/customers/${o.customer_code}`} className="truncate block hover:text-cyan-400 transition-colors">
+                                {o.customer_name ?? '—'}
+                              </Link>
+                            ) : (
+                              <div className="truncate">{o.customer_name ?? '—'}</div>
+                            )}
                             {o.city && <div className="text-xs text-gray-500 truncate">{o.city}</div>}
                           </td>
                           <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[160px] truncate">{o.reference || '—'}</td>

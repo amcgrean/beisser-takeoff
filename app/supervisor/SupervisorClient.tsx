@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { PickerStatus, RecentPick } from '../api/supervisor/pickers/route';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Props {
   isAdmin: boolean;
@@ -17,6 +18,7 @@ const STATUS_CONFIG = {
 };
 
 export default function SupervisorClient({ isAdmin, userName, userRole }: Props) {
+  usePageTracking();
   const [pickers, setPickers] = useState<PickerStatus[]>([]);
   const [recentPicks, setRecentPicks] = useState<RecentPick[]>([]);
   const [loading, setLoading] = useState(false);
