@@ -222,7 +222,11 @@ export default function TransactionsClient({ isAdmin, userBranch }: Props) {
                 </tr>
               ) : orders.map((o) => (
                 <tr key={`${o.so_number}-${o.system_id}`} className="border-b border-white/5 hover:bg-slate-800/50">
-                  <td className="px-4 py-3 font-mono text-cyan-400 font-medium">{o.so_number}</td>
+                  <td className="px-4 py-3 font-mono text-cyan-400 font-medium">
+                    <Link href={`/sales/orders/${encodeURIComponent(o.so_number)}`} className="hover:text-cyan-300 hover:underline transition-colors">
+                      {o.so_number}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3">
                     {o.customer_code ? (
                       <Link

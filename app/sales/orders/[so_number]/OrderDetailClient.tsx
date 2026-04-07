@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Truck, Package } from 'lucide-react';
+
 interface OrderLine {
   sequence: number;
   item: string | null;
@@ -35,6 +36,29 @@ interface OrderDetail {
   lines: OrderLine[];
 }
 
+interface ShipmentPick {
+  pick_id: number;
+  picker_name: string | null;
+  start_time: string | null;
+  completed_time: string | null;
+  shipment_num: string | null;
+  barcode_number: string | null;
+}
+
+interface ShipmentRecord {
+  shipment_num: number;
+  ship_date: string | null;
+  invoice_date: string | null;
+  status_flag: string | null;
+  status_flag_delivery: string | null;
+  route_id_char: string | null;
+  driver: string | null;
+  ship_via: string | null;
+  loaded_date: string | null;
+  loaded_time: string | null;
+  picks: ShipmentPick[];
+}
+
 const SO_STATUS: Record<string, { label: string; color: string }> = {
   O: { label: 'Open',      color: 'bg-blue-900/60 text-blue-300 border-blue-700' },
   K: { label: 'Picking',   color: 'bg-yellow-900/60 text-yellow-300 border-yellow-700' },
@@ -45,10 +69,26 @@ const SO_STATUS: Record<string, { label: string; color: string }> = {
   P: { label: 'Picked',    color: 'bg-indigo-900/60 text-indigo-300 border-indigo-700' },
 };
 
+const SHIPMENT_STATUS: Record<string, { label: string; color: string }> = {
+  O: { label: 'Open',      color: 'text-blue-300' },
+  K: { label: 'Picking',   color: 'text-yellow-300' },
+  S: { label: 'Staged',    color: 'text-orange-300' },
+  D: { label: 'Delivered', color: 'text-cyan-300' },
+  I: { label: 'Invoiced',  color: 'text-green-300' },
+  C: { label: 'Closed',    color: 'text-gray-400' },
+  P: { label: 'Picked',    color: 'text-indigo-300' },
+};
+
 function fmt(dateStr: string | null | undefined) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+}
+
+function fmtDatetime(dateStr: string | null | undefined) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function money(val: number | null | undefined) {
@@ -60,10 +100,107 @@ interface Props {
   soNumber: string;
 }
 
+function ShipmentRow({ shipment }: { shipment: ShipmentRecord }) {
+  const [expanded, setExpanded] = useState(false);
+  const statusInfo = shipment.status_flag
+    ? (SHIPMENT_STATUS[shipment.status_flag.toUpperCase()] ?? { label: shipment.status_flag, color: 'text-gray-400' })
+    : null;
+
+  return (
+    <div className="border border-gray-700 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800/60 hover:bg-gray-800 transition-colors text-left"
+      >
+        {expanded ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
+        <Truck size={14} className="text-gray-500 shrink-0" />
+        <span className="text-sm font-medium text-gray-200">
+          Shipment #{shipment.shipment_num}
+        </span>
+        {statusInfo && (
+          <span className={`text-xs font-medium ${statusInfo.color}`}>
+            {statusInfo.label}
+          </span>
+        )}
+        <span className="ml-auto text-xs text-gray-500 flex gap-4">
+          {shipment.ship_date && <span>Ship: {fmt(shipment.ship_date)}</span>}
+          {shipment.invoice_date && <span>Invoice: {fmt(shipment.invoice_date)}</span>}
+          {shipment.driver && <span>Driver: {shipment.driver}</span>}
+          {shipment.route_id_char && <span>Route: {shipment.route_id_char}</span>}
+          {shipment.picks.length > 0 && (
+            <span className="text-cyan-500">{shipment.picks.length} pick{shipment.picks.length !== 1 ? 's' : ''}</span>
+          )}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="bg-gray-900/60 px-4 py-3 space-y-3">
+          {/* Shipment meta */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+            {shipment.ship_via && (
+              <div>
+                <div className="text-gray-500 font-semibold tracking-wide uppercase">Ship Via</div>
+                <div className="text-gray-300">{shipment.ship_via}</div>
+              </div>
+            )}
+            {shipment.loaded_date && (
+              <div>
+                <div className="text-gray-500 font-semibold tracking-wide uppercase">Loaded</div>
+                <div className="text-gray-300">{fmt(shipment.loaded_date)}{shipment.loaded_time ? ` ${shipment.loaded_time}` : ''}</div>
+              </div>
+            )}
+            {shipment.status_flag_delivery && (
+              <div>
+                <div className="text-gray-500 font-semibold tracking-wide uppercase">Delivery Status</div>
+                <div className="text-gray-300">{shipment.status_flag_delivery}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Pick records */}
+          {shipment.picks.length > 0 ? (
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1.5">
+                <Package size={11} />
+                Pick Records
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-500 border-b border-gray-700">
+                      <th className="px-2 py-1.5 text-left font-medium">Picker</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Started</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shipment.picks.map((pick) => (
+                      <tr key={pick.pick_id} className="border-b border-gray-800">
+                        <td className="px-2 py-1.5 text-gray-200">{pick.picker_name ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-gray-400">{fmtDatetime(pick.start_time)}</td>
+                        <td className="px-2 py-1.5 text-gray-400">{fmtDatetime(pick.completed_time)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-600 italic">No pick records found for this shipment.</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function OrderDetailClient({ soNumber }: Props) {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [shipments, setShipments] = useState<ShipmentRecord[]>([]);
+  const [shipmentsLoading, setShipmentsLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,7 +217,22 @@ export default function OrderDetailClient({ soNumber }: Props) {
     }
   }, [soNumber]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadShipments = useCallback(async () => {
+    setShipmentsLoading(true);
+    try {
+      const res = await fetch(`/api/sales/orders/${encodeURIComponent(soNumber)}/shipments`);
+      if (res.ok) setShipments(await res.json() as ShipmentRecord[]);
+    } catch {
+      // non-critical — silently ignore
+    } finally {
+      setShipmentsLoading(false);
+    }
+  }, [soNumber]);
+
+  useEffect(() => {
+    load();
+    loadShipments();
+  }, [load, loadShipments]);
 
   const statusInfo = order
     ? (SO_STATUS[order.so_status?.toUpperCase()] ?? { label: order.so_status || '—', color: 'bg-gray-800/80 text-gray-400 border-gray-600' })
@@ -193,6 +345,31 @@ export default function OrderDetailClient({ soNumber }: Props) {
                     <div className="text-xs text-gray-500 font-semibold tracking-wide">TERMS</div>
                     <div className="text-gray-200">{order.terms}</div>
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Shipment History */}
+            <div className="bg-gray-900 border border-gray-700 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+                <Truck size={15} className="text-gray-400" />
+                <span className="text-sm font-semibold text-gray-300">
+                  Shipment History
+                  {!shipmentsLoading && shipments.length > 0 && (
+                    <span className="ml-1.5 text-gray-500 font-normal">({shipments.length})</span>
+                  )}
+                </span>
+                {shipmentsLoading && (
+                  <span className="ml-auto text-xs text-gray-500 animate-pulse">Loading…</span>
+                )}
+              </div>
+              <div className="p-4 space-y-2">
+                {!shipmentsLoading && shipments.length === 0 ? (
+                  <div className="text-sm text-gray-500 text-center py-4">No shipments found for this order.</div>
+                ) : (
+                  shipments.map((sh) => (
+                    <ShipmentRow key={sh.shipment_num} shipment={sh} />
+                  ))
                 )}
               </div>
             </div>
