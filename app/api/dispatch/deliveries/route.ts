@@ -63,13 +63,13 @@ export async function GET(req: NextRequest) {
       address_1: string | null;
       city: string | null;
       expect_date: string | null;
-      ar_balance: number | null;
     };
 
     const branchFilter = effectiveBranch
       ? sql`AND sh.system_id = ${effectiveBranch}`
       : sql``;
 
+    // Main delivery query — no AR subquery so this never fails due to AR data issues
     const rows = await sql<RawRow[]>`
       SELECT
         sh.so_id, sh.shipment_num, sh.system_id,
@@ -78,23 +78,36 @@ export async function GET(req: NextRequest) {
         soh.so_status, soh.reference, soh.sale_type,
         soh.cust_name, soh.cust_code,
         soh.shipto_address_1 AS address_1, soh.shipto_city AS city,
-        soh.expect_date::text,
-        ar.open_amt AS ar_balance
+        soh.expect_date::text
       FROM agility_shipments sh
       JOIN agility_so_header soh
         ON soh.system_id = sh.system_id AND soh.so_id = sh.so_id AND soh.is_deleted = false
-      LEFT JOIN (
-        SELECT ac.cust_code, SUM(ar.open_amt) AS open_amt
-        FROM agility_ar_open ar
-        JOIN agility_customers ac ON ac.cust_key = ar.cust_key AND ac.is_deleted = false
-        WHERE ar.open_flag = true AND ar.is_deleted = false
-        GROUP BY ac.cust_code
-      ) ar ON TRIM(ar.cust_code) = TRIM(soh.cust_code)
       WHERE sh.is_deleted = false
         ${branchFilter}
-        AND CAST(sh.ship_date AS DATE) = ${deliveryDate}::date
+        AND sh.ship_date::date = ${deliveryDate}::date
       ORDER BY sh.system_id, sh.route_id_char NULLS LAST, sh.so_id
     `;
+
+    // AR balance — separate query so delivery board still loads if AR data is unavailable
+    type ArRow = { cust_code: string; open_amt: number };
+    let arByCode: Record<string, number> = {};
+    try {
+      const custCodes = [...new Set(rows.map((r) => r.cust_code?.trim()).filter(Boolean))] as string[];
+      if (custCodes.length > 0) {
+        const arRows = await sql<ArRow[]>`
+          SELECT TRIM(ac.cust_code) AS cust_code, SUM(ar.open_amt) AS open_amt
+          FROM agility_ar_open ar
+          JOIN agility_customers ac ON ac.cust_key = ar.cust_key AND ac.is_deleted = false
+          WHERE ar.open_flag = true
+            AND ar.is_deleted = false
+            AND TRIM(ac.cust_code) = ANY(${custCodes})
+          GROUP BY TRIM(ac.cust_code)
+        `;
+        arByCode = Object.fromEntries(arRows.map((r) => [r.cust_code, Number(r.open_amt)]));
+      }
+    } catch (arErr) {
+      console.warn('[dispatch/deliveries] AR balance fetch failed (non-fatal):', arErr);
+    }
 
     const stops: DeliveryStop[] = rows.map((r: RawRow) => ({
       so_id: r.so_id,
@@ -115,7 +128,7 @@ export async function GET(req: NextRequest) {
       address_1: r.address_1?.trim() || null,
       city: r.city?.trim() || null,
       expect_date: r.expect_date,
-      ar_balance: r.ar_balance != null ? Number(r.ar_balance) : null,
+      ar_balance: arByCode[r.cust_code?.trim() ?? ''] ?? null,
     }));
 
     return NextResponse.json(stops);
