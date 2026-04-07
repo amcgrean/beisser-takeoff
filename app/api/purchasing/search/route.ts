@@ -24,13 +24,29 @@ export async function GET(req: NextRequest) {
       po_status: string | null;
       receipt_count: number | null;
     }[]>`
-      SELECT po_number, supplier_name, supplier_code, system_id,
-             expect_date, order_date, po_status, receipt_count
-      FROM app_po_search
-      WHERE po_number ILIKE ${like}
-         OR supplier_name ILIKE ${like}
-         OR supplier_code ILIKE ${like}
-      ORDER BY po_number
+      SELECT
+        ph.po_id AS po_number,
+        ph.supplier_name,
+        ph.supplier_code,
+        ph.system_id,
+        ph.expect_date::text AS expect_date,
+        ph.order_date::text AS order_date,
+        ph.po_status,
+        COALESCE(rh.receipt_count, 0)::int AS receipt_count
+      FROM agility_po_header ph
+      LEFT JOIN (
+        SELECT system_id, po_id, COUNT(*)::int AS receipt_count
+        FROM agility_receiving_header
+        WHERE is_deleted = false
+        GROUP BY system_id, po_id
+      ) rh ON rh.system_id = ph.system_id AND rh.po_id = ph.po_id
+      WHERE ph.is_deleted = false
+        AND (
+          ph.po_id ILIKE ${like}
+          OR ph.supplier_name ILIKE ${like}
+          OR ph.supplier_code ILIKE ${like}
+        )
+      ORDER BY ph.po_id
       LIMIT ${limit}
     `;
     return NextResponse.json(rows);
