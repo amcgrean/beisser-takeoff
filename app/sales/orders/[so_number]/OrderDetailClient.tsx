@@ -110,27 +110,27 @@ function ShipmentRow({ shipment }: { shipment: ShipmentRecord }) {
     <div className="border border-gray-700 rounded-lg overflow-hidden">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800/60 hover:bg-gray-800 transition-colors text-left"
+        className="w-full flex items-start gap-3 px-4 py-3 bg-gray-800/60 hover:bg-gray-800 transition-colors text-left"
       >
-        {expanded ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
-        <Truck size={14} className="text-gray-500 shrink-0" />
-        <span className="text-sm font-medium text-gray-200">
-          Shipment #{shipment.shipment_num}
-        </span>
-        {statusInfo && (
-          <span className={`text-xs font-medium ${statusInfo.color}`}>
-            {statusInfo.label}
-          </span>
-        )}
-        <span className="ml-auto text-xs text-gray-500 flex gap-4">
-          {shipment.ship_date && <span>Ship: {fmt(shipment.ship_date)}</span>}
-          {shipment.invoice_date && <span>Invoice: {fmt(shipment.invoice_date)}</span>}
-          {shipment.driver && <span>Driver: {shipment.driver}</span>}
-          {shipment.route_id_char && <span>Route: {shipment.route_id_char}</span>}
-          {shipment.picks.length > 0 && (
-            <span className="text-cyan-500">{shipment.picks.length} pick{shipment.picks.length !== 1 ? 's' : ''}</span>
-          )}
-        </span>
+        <span className="mt-0.5 shrink-0">{expanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}</span>
+        <Truck size={14} className="text-gray-500 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-gray-200">Shipment #{shipment.shipment_num}</span>
+            {statusInfo && (
+              <span className={`text-xs font-medium ${statusInfo.color}`}>{statusInfo.label}</span>
+            )}
+            {shipment.picks.length > 0 && (
+              <span className="text-xs text-cyan-500">{shipment.picks.length} pick{shipment.picks.length !== 1 ? 's' : ''}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-0.5 text-xs text-gray-500">
+            {shipment.ship_date && <span>Ship: {fmt(shipment.ship_date)}</span>}
+            {shipment.invoice_date && <span>Invoice: {fmt(shipment.invoice_date)}</span>}
+            {shipment.driver && <span>Driver: {shipment.driver}</span>}
+            {shipment.route_id_char && <span>Route: {shipment.route_id_char}</span>}
+          </div>
+        </div>
       </button>
 
       {expanded && (

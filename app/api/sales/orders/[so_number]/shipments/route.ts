@@ -65,7 +65,7 @@ export async function GET(
         sh.loaded_time
       FROM agility_shipments sh
       WHERE sh.is_deleted = false
-        AND sh.so_id = ${so_number}
+        AND sh.so_id::text = ${so_number}
       ORDER BY sh.shipment_num
     `;
 
@@ -73,7 +73,7 @@ export async function GET(
       return NextResponse.json([]);
     }
 
-    // Fetch WH-Tracker pick records for this SO
+    // Fetch WH-Tracker pick records for this SO — non-fatal if table missing
     type PickRow = {
       pick_id: number;
       picker_name: string | null;
@@ -83,52 +83,53 @@ export async function GET(
       barcode_number: string | null;
     };
 
-    const pickRows = await sql<PickRow[]>`
-      SELECT
-        p.id          AS pick_id,
-        ps.name       AS picker_name,
-        p.start_time::text  AS start_time,
-        p.completed_time::text AS completed_time,
-        p.shipment_num,
-        p.barcode_number
-      FROM pick p
-      LEFT JOIN pickster ps ON ps.id = p.picker_id
-      WHERE p.barcode_number = ${so_number}
-        AND p.completed_time IS NOT NULL
-      ORDER BY p.start_time DESC
-    `;
+    let picksByShipment: Record<string, ShipmentPick[]> = {};
+    try {
+      const pickRows = await sql<PickRow[]>`
+        SELECT
+          p.id          AS pick_id,
+          ps.name       AS picker_name,
+          p.start_time::text  AS start_time,
+          p.completed_time::text AS completed_time,
+          p.shipment_num,
+          p.barcode_number
+        FROM pick p
+        LEFT JOIN pickster ps ON ps.id = p.picker_id
+        WHERE p.barcode_number = ${so_number}
+          AND p.completed_time IS NOT NULL
+        ORDER BY p.start_time DESC
+      `;
 
-    // Group picks by shipment_num
-    const picksByShipment: Record<string, ShipmentPick[]> = {};
-    for (const row of pickRows) {
-      const key = row.shipment_num ?? '__none__';
-      if (!picksByShipment[key]) picksByShipment[key] = [];
-      picksByShipment[key].push({
-        pick_id: row.pick_id,
-        picker_name: row.picker_name?.trim() || null,
-        start_time: row.start_time,
-        completed_time: row.completed_time,
-        shipment_num: row.shipment_num,
-        barcode_number: row.barcode_number,
-      });
+      // Group picks by shipment_num (use raw string to match agility_shipments.shipment_num)
+      for (const row of pickRows) {
+        const key = row.shipment_num != null ? String(row.shipment_num) : '__none__';
+        if (!picksByShipment[key]) picksByShipment[key] = [];
+        picksByShipment[key].push({
+          pick_id: row.pick_id,
+          picker_name: row.picker_name?.trim() || null,
+          start_time: row.start_time,
+          completed_time: row.completed_time,
+          shipment_num: row.shipment_num,
+          barcode_number: row.barcode_number,
+        });
+      }
+    } catch (pickErr) {
+      console.warn('[sales/orders/shipments] Pick fetch failed (non-fatal):', pickErr);
     }
 
-    const result: ShipmentRecord[] = shipmentRows.map((sh) => {
-      const key = sh.shipment_num ? String(sh.shipment_num).padStart(3, '0') : '__none__';
-      return {
-        shipment_num: sh.shipment_num,
-        ship_date: sh.ship_date,
-        invoice_date: sh.invoice_date,
-        status_flag: sh.status_flag?.trim() || null,
-        status_flag_delivery: sh.status_flag_delivery?.trim() || null,
-        route_id_char: sh.route_id_char?.trim() || null,
-        driver: sh.driver?.trim() || null,
-        ship_via: sh.ship_via?.trim() || null,
-        loaded_date: sh.loaded_date,
-        loaded_time: sh.loaded_time?.trim() || null,
-        picks: picksByShipment[key] ?? picksByShipment[String(sh.shipment_num)] ?? [],
-      };
-    });
+    const result: ShipmentRecord[] = shipmentRows.map((sh) => ({
+      shipment_num: sh.shipment_num,
+      ship_date: sh.ship_date,
+      invoice_date: sh.invoice_date,
+      status_flag: sh.status_flag?.trim() || null,
+      status_flag_delivery: sh.status_flag_delivery?.trim() || null,
+      route_id_char: sh.route_id_char?.trim() || null,
+      driver: sh.driver?.trim() || null,
+      ship_via: sh.ship_via?.trim() || null,
+      loaded_date: sh.loaded_date,
+      loaded_time: sh.loaded_time?.trim() || null,
+      picks: picksByShipment[String(sh.shipment_num)] ?? [],
+    }));
 
     return NextResponse.json(result);
   } catch (err) {

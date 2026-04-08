@@ -364,6 +364,7 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                     })}
                   </div>
                 </div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-gray-500 border-b border-gray-700">
@@ -432,6 +433,7 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             ))}
           </>
