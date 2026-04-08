@@ -370,7 +370,14 @@ export function calculateFraming(
     // ── Tyvek / house wrap (non-basement) ────────────────────────────────────
     // Sum all heights: ft * LF gives SF per height
     const HEIGHT_FT: Record<string, number> = { '8ft': 8, '9ft': 9, '10ft': 10, '12ft': 12, '14ft': 14, '16ft': 16, '20ft': 20 };
-    if (!isBasement && inputs.materials.tyvekType !== 'N/A' && inputs.materials.tyvekType !== 'Tape Only') {
+    if (!isBasement && inputs.materials.tyvekType === 'Tape Only') {
+        // Tape Only: generate Tyvek tape rolls based on perimeter (1 roll / 180ft approx)
+        const extPerimLF = Object.values(extByHeight).reduce((s, v) => s + v, 0);
+        if (extPerimLF > 0) {
+            const tapeQty = Math.max(1, Math.ceil(extPerimLF / 180));
+            items.push({ qty: tapeQty, uom: 'RL', sku: 'tyvekconstrtape', description: `Tyvek Construction Tape — ${name}`, group: groupLabel, is_dynamic_sku: false });
+        }
+    } else if (!isBasement && inputs.materials.tyvekType !== 'N/A') {
         const extWallSF = Object.entries(extByHeight).reduce((sum, [ht, lf]) => sum + lf * (HEIGHT_FT[ht] ?? 8), 0);
 
         if (extWallSF > 0) {
