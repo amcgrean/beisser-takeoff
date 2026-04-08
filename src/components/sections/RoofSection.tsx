@@ -45,6 +45,20 @@ export function RoofSectionComp({ data, onChange }: Props) {
                 </div>
             </SubSection>
 
+            <SubSection title="Connectors & Flashing">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <InputGroup label="HUCQ Ties" hint="Hurricane rafter tie count">
+                        <input type="number" name="hucqCount" value={(data.hucqCount ?? 0) || ''} onChange={handleChange} className="input-field" min="0" placeholder="Qty" />
+                    </InputGroup>
+                    <InputGroup label="Vycor LF" hint="Peel-and-stick flashing LF">
+                        <input type="number" name="vycorLF" value={(data.vycorLF ?? 0) || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                    <InputGroup label="Roof Gypsum SF" hint="Fire-rated gypsum under roof">
+                        <input type="number" name="roofGypsumSF" value={(data.roofGypsumSF ?? 0) || ''} onChange={handleChange} className="input-field" min="0" />
+                    </InputGroup>
+                </div>
+            </SubSection>
+
             <SubSection title="Posts & Headers">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <InputGroup label="Post Count">

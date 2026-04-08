@@ -102,6 +102,23 @@ export function calculateRoof(
         });
     }
 
+    // HUCQ hurricane ties
+    if ((section.hucqCount ?? 0) > 0) {
+        items.push({ qty: section.hucqCount, uom: 'EA', sku: 'hucq', description: 'HUCQ Hurricane Rafter Tie', group: 'Roof', is_dynamic_sku: false });
+    }
+
+    // Vycor peel-and-stick flashing (50ft rolls)
+    if ((section.vycorLF ?? 0) > 0) {
+        const rolls = Math.ceil(section.vycorLF / 50);
+        items.push({ qty: rolls, uom: 'RL', sku: 'vycor50', description: 'Vycor Peel-and-Stick Flashing (50ft roll)', group: 'Roof', is_dynamic_sku: false });
+    }
+
+    // Roof gypsum (fire-rated ceiling — 4×8 sheets)
+    if ((section.roofGypsumSF ?? 0) > 0) {
+        const sheets = Math.ceil(section.roofGypsumSF / 32);
+        items.push({ qty: sheets, uom: 'EA', sku: 'gyp5812', description: 'Gypsum Board 5/8" × 4×12 (Roof Underside)', group: 'Roof', is_dynamic_sku: false });
+    }
+
     return items;
 }
 

@@ -93,6 +93,9 @@ export interface RoofSection {
     soffitLF: number;          // total soffit perimeter LF (drives sub-fascia)
     gableSF: number;           // gable end SF (for OSB gable sheathing)
     valley_flash_rolls: number; // manual override — 0 = auto-derive from valleyCount
+    hucqCount: number;          // HUCQ hurricane tie qty (rafter/hip connections)
+    vycorLF: number;            // Vycor peel-and-stick flashing LF
+    roofGypsumSF: number;       // gypsum SF on underside of roof (fire rating)
 }
 
 export interface SidingSection {
