@@ -115,6 +115,8 @@ export default function TakeoffApp({ session, initialBidId }: Props) {
         trimSwitches: dataCache.trimSwitches,
         railingMatrix: dataCache.railingMatrix,
         osbSheeting: dataCache.osbSheeting,
+        doorStyles: dataCache.doorStyles,
+        customerOverrides: dataCache.customerOverrides,
       });
       setLineItems(items);
     }
