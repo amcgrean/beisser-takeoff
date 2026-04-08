@@ -1,7 +1,7 @@
 import { LineItem, JobSetup } from '../types/estimate';
 
 export function downloadCsv(items: LineItem[], setup: JobSetup) {
-    const headers = ['Qty', 'UOM', 'ItemCode', 'Description', 'Group', 'JobName', 'Estimator', 'CustomerCode', 'ShipTo', 'Message', 'Tally'];
+    const headers = ['Qty', 'UOM', 'ItemCode', 'Description', 'Group', 'JobName', 'Estimator', 'CustomerCode', 'ShipTo', 'Message', 'Tally', 'Warning'];
 
     const rows = items.map(item => [
         item.qty,
@@ -14,7 +14,8 @@ export function downloadCsv(items: LineItem[], setup: JobSetup) {
         setup.customerCode,
         '', // ShipTo
         '', // Message
-        item.tally || ''
+        item.tally || '',
+        item.warning || (item.is_dynamic_sku ? 'LOOKUP REQUIRED' : ''),
     ]);
 
     const csvContent = [
