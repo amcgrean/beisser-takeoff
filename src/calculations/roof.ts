@@ -39,13 +39,23 @@ export function calculateRoof(
         });
     }
 
-    // Posts
+    // Posts + post bases (ABW adjustable or BC4/BC6 direct bearing)
     if (section.postCount > 0) {
         items.push({
             qty: section.postCount,
             uom: 'EA',
             sku: `post${section.postSize.replace('x', '')}`,
             description: `${section.postSize} Post`,
+            group: 'Roof',
+            is_dynamic_sku: false
+        });
+        // ABW post base — SKU varies by post size (abw44z for 4x4, abw66z for 6x6)
+        const postSizeNum = section.postSize.replace('x', '');
+        items.push({
+            qty: section.postCount,
+            uom: 'EA',
+            sku: `abw${postSizeNum}z`,
+            description: `ABW${postSizeNum}Z Post Base`,
             group: 'Roof',
             is_dynamic_sku: false
         });
