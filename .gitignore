@@ -28,3 +28,7 @@ dist-ssr
 out/
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# Claude Code local files
+.claude/
+AGENTS.md
