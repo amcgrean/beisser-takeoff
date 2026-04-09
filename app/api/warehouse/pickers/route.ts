@@ -2,20 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { getErpSql } from '../../../../db/supabase';
 
-// GET  /api/warehouse/pickers       — list all pickers
-// POST /api/warehouse/pickers       — add a picker { name, user_type }
+// GET  /api/warehouse/pickers         — list pickers; ?branch=XX filters by branch_code
+// POST /api/warehouse/pickers         — add a picker { name, user_type, branch_code }
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const branch = req.nextUrl.searchParams.get('branch');
+
   try {
     const sql = getErpSql();
 
-    type PickerRow = { id: number; name: string; user_type: string | null };
+    type PickerRow = { id: number; name: string; user_type: string | null; branch_code: string | null };
 
-    const rows = await sql<PickerRow[]>`
-      SELECT id, name, user_type FROM pickster ORDER BY name
-    `;
+    const rows = branch
+      ? await sql<PickerRow[]>`
+          SELECT id, name, user_type, branch_code FROM pickster WHERE branch_code = ${branch} ORDER BY name
+        `
+      : await sql<PickerRow[]>`
+          SELECT id, name, user_type, branch_code FROM pickster ORDER BY name
+        `;
 
     return NextResponse.json({ pickers: rows });
   } catch (err) {
@@ -33,7 +39,7 @@ export async function POST(req: NextRequest) {
     (session.user.roles ?? []).some((r) => ['admin', 'supervisor'].includes(r));
   if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  let body: { name?: string; user_type?: string };
+  let body: { name?: string; user_type?: string; branch_code?: string };
   try {
     body = await req.json();
   } catch {
@@ -42,15 +48,18 @@ export async function POST(req: NextRequest) {
 
   const name = (body.name ?? '').trim();
   const user_type = (body.user_type ?? '').trim() || null;
+  const branch_code = (body.branch_code ?? '').trim() || null;
 
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   try {
     const sql = getErpSql();
 
-    type NewRow = { id: number; name: string; user_type: string | null };
+    type NewRow = { id: number; name: string; user_type: string | null; branch_code: string | null };
     const rows = await sql<NewRow[]>`
-      INSERT INTO pickster (name, user_type) VALUES (${name}, ${user_type}) RETURNING id, name, user_type
+      INSERT INTO pickster (name, user_type, branch_code)
+      VALUES (${name}, ${user_type}, ${branch_code})
+      RETURNING id, name, user_type, branch_code
     `;
 
     return NextResponse.json(rows[0], { status: 201 });

@@ -19,7 +19,7 @@ export async function GET(
   try {
     const sql = getErpSql();
 
-    type PickerRow = { id: number; name: string; user_type: string | null };
+    type PickerRow = { id: number; name: string; user_type: string | null; branch_code: string | null };
     type PickRow = {
       id: number;
       barcode_number: string | null;
@@ -34,7 +34,7 @@ export async function GET(
     };
 
     const [pickerRows, recentPicks, statRows] = await Promise.all([
-      sql<PickerRow[]>`SELECT id, name, user_type FROM pickster WHERE id = ${pickerId} LIMIT 1`,
+      sql<PickerRow[]>`SELECT id, name, user_type, branch_code FROM pickster WHERE id = ${pickerId} LIMIT 1`,
       sql<PickRow[]>`
         SELECT id, barcode_number, start_time::text, completed_time::text, pick_type_id
         FROM pick
@@ -81,21 +81,28 @@ export async function PATCH(
   const pickerId = parseInt(id, 10);
   if (isNaN(pickerId)) return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
 
-  let body: { name?: string; user_type?: string };
+  let body: { name?: string; user_type?: string; branch_code?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const name = (body.name ?? '').trim();
   const user_type = (body.user_type ?? '').trim() || null;
+  const branch_code = 'branch_code' in body ? ((body.branch_code ?? '').trim() || null) : undefined;
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   try {
     const sql = getErpSql();
-    type Row = { id: number; name: string; user_type: string | null };
-    const rows = await sql<Row[]>`
-      UPDATE pickster SET name = ${name}, user_type = ${user_type}
-      WHERE id = ${pickerId}
-      RETURNING id, name, user_type
-    `;
+    type Row = { id: number; name: string; user_type: string | null; branch_code: string | null };
+    const rows = branch_code !== undefined
+      ? await sql<Row[]>`
+          UPDATE pickster SET name = ${name}, user_type = ${user_type}, branch_code = ${branch_code}
+          WHERE id = ${pickerId}
+          RETURNING id, name, user_type, branch_code
+        `
+      : await sql<Row[]>`
+          UPDATE pickster SET name = ${name}, user_type = ${user_type}
+          WHERE id = ${pickerId}
+          RETURNING id, name, user_type, branch_code
+        `;
     if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(rows[0]);
   } catch (err) {
