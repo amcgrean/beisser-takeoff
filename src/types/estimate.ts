@@ -206,6 +206,13 @@ export interface ExteriorDeckSection {
     landing: boolean;
 }
 
+export interface BearingWallSection {
+    lf: number;
+    height: 8 | 9 | 10;
+    studSize: '2x4' | '2x6';
+    lslStuds: boolean;
+}
+
 export interface PartyWallSection {
     lf: number;           // total party wall LF
     height: number;       // wall height in ft
@@ -227,6 +234,7 @@ export interface JobInputs {
     basement: BasementSection;
     firstFloor: FloorSection;
     secondFloor: FloorSection;
+    bearingWall: BearingWallSection;
     roof: RoofSection;
     shingles: { sf: number; ridgeLF: number; hipLF: number; ridgecatLF: number; starterLF: number; roofVentCount: number; iceWaterLF: number };
     siding: SidingSection;

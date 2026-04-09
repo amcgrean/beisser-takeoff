@@ -1,4 +1,4 @@
-import { WallSection, BasementSection, FloorSection, PartyWallSection, LineItem, JobInputs, Multipliers } from '../types/estimate';
+import { WallSection, BasementSection, FloorSection, BearingWallSection, PartyWallSection, LineItem, JobInputs, Multipliers } from '../types/estimate';
 
 export function getLVLCode(size: string, length_ft: number, engineeredLumber: any): string {
     const entry = engineeredLumber?.size_to_prefix?.find((e: any) => e.size === size);
@@ -480,6 +480,41 @@ export function calculatePartyWall(
     const gypsumSF = lf * height * 2 * section.gypsumLayers; // 2 sides
     const sheetQty = Math.ceil(gypsumSF / 32); // 4×8 sheet = 32 SF
     items.push({ qty: sheetQty, uom: 'EA', sku: 'gyp5812', description: `5/8" Type-X Gypsum (Party Wall)`, group: 'Party Wall', is_dynamic_sku: false });
+
+    return items;
+}
+
+// ── Bearing Wall ─────────────────────────────────────────────────────────────
+// Dedicated bearing wall section: studs (1 per 1.5 LF + 20% waste), 3 plates per LF
+export function calculateBearingWall(
+    section: BearingWallSection,
+    multipliers: Multipliers
+): LineItem[] {
+    const items: LineItem[] = [];
+    if (section.lf <= 0) return items;
+
+    const { lf, height, studSize, lslStuds } = section;
+    const studMultiplier = multipliers.framing.stud_multiplier_main.value;
+    const waste = multipliers.framing.twenty_percent_waste.value;
+
+    if (lslStuds) {
+        // LSL studs — SKU follows same pattern as ext wall LSL studs
+        const heightCode = height === 8 ? '08' : height === 9 ? '09' : '10';
+        const prefix = studSize === '2x6' ? '020600' : '020400';
+        const sku = `${prefix}lsl${heightCode}`;
+        const qty = Math.ceil(lf * studMultiplier * waste);
+        if (qty > 0) items.push({ qty, uom: 'EA', sku, description: `${studSize} ${height}ft LSL Bearing Wall Stud`, group: 'Bearing Wall', is_dynamic_sku: false });
+    } else {
+        const heightCode = String(height).padStart(2, '0');
+        const sku = studSize === '2x6' ? `0206studfir${heightCode}` : `0204studfir${heightCode}`;
+        const qty = Math.ceil(lf * studMultiplier * waste);
+        if (qty > 0) items.push({ qty, uom: 'EA', sku, description: `${studSize} ${height}ft Bearing Wall Stud`, group: 'Bearing Wall', is_dynamic_sku: false });
+    }
+
+    // Plates: 3 per LF (1 bottom + 2 top) — 16ft sticks
+    const plateSku = studSize === '2x6' ? '020616' : '020416';
+    const plateQty = Math.ceil(lf / 16) * 3;
+    if (plateQty > 0) items.push({ qty: plateQty, uom: 'EA', sku: plateSku, description: `${studSize} × 16ft Bearing Wall Plate`, group: 'Bearing Wall', is_dynamic_sku: false });
 
     return items;
 }

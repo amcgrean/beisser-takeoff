@@ -1,5 +1,5 @@
 import { JobInputs, LineItem, Multipliers } from '../types/estimate';
-import { calculateFraming, calculatePartyWall } from './framing';
+import { calculateFraming, calculateBearingWall, calculatePartyWall } from './framing';
 import { calculateSiding } from './siding';
 import { calculateHardware } from './hardware';
 import { calculateRoof, calculateShingles } from './roof';
@@ -76,6 +76,9 @@ export function calculateEstimate(
 
     // ── Exterior deck + railing ───────────────────────────────────────────────────
     all = all.concat(calculateDeck(inputs.exteriorDeck, inputs, data.railingMatrix));
+
+    // ── Bearing Wall ─────────────────────────────────────────────────────────────
+    all = all.concat(calculateBearingWall(inputs.bearingWall, data.multipliers));
 
     // ── Party Wall ───────────────────────────────────────────────────────────────
     all = all.concat(calculatePartyWall(inputs.partyWall, data.multipliers));

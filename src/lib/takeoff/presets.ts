@@ -136,6 +136,9 @@ export const STANDARD_PRESETS: MeasurementPreset[] = [
   { id: 'count-balusters',     name: 'Balusters',         category: 'Counts', color: '#d97706', toolType: 'count',    targetField: 'trim.balusterCount',           unit: 'EA' },
   { id: 'count-newels',        name: 'Newel Posts',       category: 'Counts', color: '#b45309', toolType: 'count',    targetField: 'trim.newelCount',              unit: 'EA' },
 
+  // ── Bearing Wall ──
+  { id: 'bearing-wall-lf', name: 'Bearing Wall LF', category: 'Bearing Wall', color: '#a855f7', toolType: 'polyline', targetField: 'bearingWall.lf', unit: 'LF' },
+
   // ── Party Wall ──
   { id: 'party-wall-lf', name: 'Party Wall', category: 'Party Wall', color: '#f43f5e', toolType: 'polyline', targetField: 'partyWall.lf', unit: 'LF' },
 

@@ -14,6 +14,7 @@ import { HardwareSectionComp } from './components/sections/HardwareSection';
 import { ExteriorDeckSectionComp } from './components/sections/ExteriorDeckSection';
 import { WindowsDoorsSectionComp } from './components/sections/WindowsDoorsSection';
 import { PartyWallSectionComp } from './components/sections/PartyWallSection';
+import { BearingWallSectionComp } from './components/sections/BearingWallSection';
 import { OptionsSectionComp } from './components/sections/OptionsSection';
 import { downloadCsv } from './utils/export';
 import { BidSummary } from './components/BidSummary';
@@ -48,6 +49,7 @@ const initialInputs: JobInputs = {
     trim: { baseType: '', baseLF: 0, caseType: '', doorCounts: { single68: 0, single80: 0, double30: 0, double40: 0, double50: 0, bifold40: 0, bifold50: 0, bifold30: 0, slab28: 0, slab30: 0, pocket28: 0, pocket30: 0, barnDoor28: 0, barnDoor30: 0 }, windowCount: 0, windowLF: 0, handrailType: '', handrailLF: 0, handrailBracketCount: 0, crownType: '', crownLF: 0, chairRailLF: 0, shoeLF: 0, baseLFBasement: 0, balusterCount: 0, newelCount: 0, rosetteCount: 0, skirtBoardLF: 0, falseTreadCount: 0, stairSetCount: 0 },
     hardware: { type: '', counts: { keyed: 0, passage: 0, privacy: 0, dummy: 0, deadbolt: 0, handleset: 0, stopHinged: 0, stopSpring: 0, fingerPull: 0, bifoldKnob: 0, pocketLock: 0, insideTrim: 0 } },
     exteriorDeck: { deckSF: 0, joistSize: '2x8', joistSpacing: 16, beamSize: '2x10', beamSpan: 8, glulamBeamLF: 0, hurricaneTieCount: 0, deckingType: 'Treated', deckingLengths: [], railingStyle: 'Treated', railingLF: 0, postCount: 0, postHeight: 8, ledgerLF: 0, facemountQty: 0, stairCount: 0, landing: false },
+    bearingWall: { lf: 0, height: 9, studSize: '2x4', lslStuds: false },
     partyWall: { lf: 0, height: 9, gypsumLayers: 1, framingSize: '2x4' },
     windowsDoors: { windowCount: 0, doors: [] },
     options: []
@@ -358,6 +360,7 @@ export default function App() {
                                 <div id="section-trim"><TrimSectionComp data={inputs.trim} onChange={(val) => setInputs({ ...inputs, trim: val })} /></div>
                                 <div id="section-hardware"><HardwareSectionComp data={inputs.hardware} lookups={dataCache.hardwareLookup || []} onChange={(val) => setInputs({ ...inputs, hardware: val })} /></div>
                                 <div id="section-exterior-deck"><ExteriorDeckSectionComp data={inputs.exteriorDeck} onChange={(val) => setInputs({ ...inputs, exteriorDeck: val })} /></div>
+                                <div id="section-bearing-wall"><BearingWallSectionComp data={inputs.bearingWall} onChange={(val) => setInputs({ ...inputs, bearingWall: val })} /></div>
                                 <div id="section-party-wall"><PartyWallSectionComp data={inputs.partyWall} onChange={(val) => setInputs({ ...inputs, partyWall: val })} /></div>
                                 <div id="section-windows-doors"><WindowsDoorsSectionComp data={inputs.windowsDoors} onChange={(val) => setInputs({ ...inputs, windowsDoors: val })} /></div>
                                 <div id="section-options"><OptionsSectionComp data={inputs.options} onChange={(val) => setInputs({ ...inputs, options: val })} /></div>
