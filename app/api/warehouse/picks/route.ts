@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
         WHERE is_deleted = false
           AND UPPER(COALESCE(print_status, '')) = 'PICK TICKET'
           AND UPPER(COALESCE(tran_type, '')) = 'SO'
-          AND created_date >= CURRENT_DATE - INTERVAL '30 days'
+          AND created_date >= (NOW() AT TIME ZONE 'America/Chicago')::date - INTERVAL '30 days'
         GROUP BY system_id, tran_id
       )
       SELECT
@@ -117,8 +117,8 @@ export async function GET(req: NextRequest) {
         AND UPPER(COALESCE(soh.so_status, '')) != 'C'
         AND (
           UPPER(COALESCE(soh.so_status, '')) IN ('K', 'P', 'S')
-          OR (UPPER(COALESCE(soh.so_status, '')) = 'I' AND CAST(sh.invoice_date AS DATE) = CURRENT_DATE)
-          OR CAST(soh.expect_date AS DATE) = CURRENT_DATE
+          OR (UPPER(COALESCE(soh.so_status, '')) = 'I' AND CAST(sh.invoice_date AS DATE) = (NOW() AT TIME ZONE 'America/Chicago')::date)
+          OR CAST(soh.expect_date AS DATE) = (NOW() AT TIME ZONE 'America/Chicago')::date
         )
         AND UPPER(COALESCE(soh.sale_type, '')) NOT IN ('DIRECT', 'WILLCALL', 'XINSTALL', 'HOLD')
       GROUP BY soh.system_id, soh.so_id, soh.cust_name, soh.reference, soh.so_status,

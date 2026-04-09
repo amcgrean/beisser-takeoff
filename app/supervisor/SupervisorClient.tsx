@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { PickerStatus, RecentPick } from '../api/supervisor/pickers/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { formatTimeCT } from '@/lib/central-time';
 
 interface Props {
   isAdmin: boolean;
@@ -68,7 +69,7 @@ export default function SupervisorClient({ isAdmin, userName, userRole }: Props)
           </div>
           <div className="flex items-center gap-3">
             {lastRefresh && (
-              <span className="text-xs text-gray-500">Updated {lastRefresh.toLocaleTimeString()}</span>
+              <span className="text-xs text-gray-500">Updated {formatTimeCT(lastRefresh)} CT</span>
             )}
             <button
               onClick={load}
@@ -167,10 +168,10 @@ export default function SupervisorClient({ isAdmin, userName, userRole }: Props)
                     <td className="px-4 py-2.5 text-gray-200">{p.picker_name}</td>
                     <td className="px-4 py-2.5 font-mono text-cyan-300 text-xs">{p.so_number}</td>
                     <td className="px-4 py-2.5 text-xs text-gray-400">
-                      {p.start_time ? new Date(p.start_time).toLocaleTimeString() : '—'}
+                      {formatTimeCT(p.start_time)}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-400">
-                      {p.completed_time ? new Date(p.completed_time).toLocaleTimeString() : '—'}
+                      {formatTimeCT(p.completed_time)}
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { getErpSql } from '../../../../db/supabase';
+import { businessMinutesElapsed } from '@/lib/central-time';
 
 export interface PickerStatus {
   id: number;
@@ -66,12 +67,11 @@ export async function GET() {
     const pickAssignMap = new Map(pickAssignments.map((a) => [a.picker_id, a.so_number]));
     const woAssignMap = new Map(woAssignments.map((a) => [a.assigned_to_id, a]));
 
-    const now = Date.now();
     const pickerStatuses: PickerStatus[] = pickers.map((p) => {
       const active = activeMap.get(p.id);
       if (active) {
         const durationMin = active.start_time
-          ? Math.max(0, Math.round((now - new Date(active.start_time).getTime()) / 60_000))
+          ? businessMinutesElapsed(active.start_time)
           : 0;
         return {
           id: p.id,

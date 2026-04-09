@@ -54,8 +54,8 @@ export async function GET(req: NextRequest) {
           ps.id        AS picker_id,
           ps.name      AS picker_name,
           ps.user_type,
-          COUNT(CASE WHEN p.completed_time::date = CURRENT_DATE THEN 1 END)::int   AS today_count,
-          COUNT(CASE WHEN p.completed_time::date >= CURRENT_DATE - 4 THEN 1 END)::int AS five_day_count
+          COUNT(CASE WHEN p.completed_time::date = (NOW() AT TIME ZONE 'America/Chicago')::date THEN 1 END)::int   AS today_count,
+          COUNT(CASE WHEN p.completed_time::date >= (NOW() AT TIME ZONE 'America/Chicago')::date - 4 THEN 1 END)::int AS five_day_count
         FROM pickster ps
         LEFT JOIN pick p ON p.picker_id = ps.id AND p.completed_time IS NOT NULL
         GROUP BY ps.id, ps.name, ps.user_type

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenPickSummary } from '../api/warehouse/picks/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { formatTimeCT, formatDateCT } from '@/lib/central-time';
 
 interface BranchStats {
   system_id: string;
@@ -11,6 +12,17 @@ interface BranchStats {
   open_work_orders: number;
   handling_breakdown: Record<string, number>;
   updated_at: string;
+}
+
+interface Picker {
+  id: number;
+  name: string;
+  user_type: string | null;
+}
+
+interface Assignment {
+  picker_id: number;
+  picker_name: string;
 }
 
 interface Props {
@@ -51,6 +63,9 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
   const [picksError, setPicksError] = useState('');
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [handlingFilter, setHandlingFilter] = useState('');
+  const [pickers, setPickers] = useState<Picker[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
+  const [assigningKey, setAssigningKey] = useState<string | null>(null);
 
   // Refresh stats every 60 seconds (only when tab is visible)
   useEffect(() => {
@@ -87,10 +102,29 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
     }
   }, []);
 
+  // Load pickers list + current assignments (for supervisor assign UI)
+  const loadAssignmentData = useCallback(async () => {
+    try {
+      const [pickersRes, assignRes] = await Promise.all([
+        fetch('/api/warehouse/pickers'),
+        fetch('/api/warehouse/picks/assign'),
+      ]);
+      if (pickersRes.ok) {
+        const d = await pickersRes.json();
+        setPickers(d.pickers ?? []);
+      }
+      if (assignRes.ok) {
+        const d = await assignRes.json();
+        setAssignments(d.assignments ?? {});
+      }
+    } catch { /* silent */ }
+  }, []);
+
   // Auto-load picks for the selected branch
   useEffect(() => {
     loadPicks(selectedBranch);
-  }, [selectedBranch, loadPicks]);
+    loadAssignmentData();
+  }, [selectedBranch, loadPicks, loadAssignmentData]);
 
   // Collect all handling codes from loaded picks for filter dropdown
   const allHandlingCodes = useMemo(
@@ -105,6 +139,27 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
     [picks, handlingFilter]
   );
 
+  const handleAssign = useCallback(async (soNumber: string, pickerId: number | null) => {
+    const key = soNumber;
+    setAssigningKey(key);
+    try {
+      const res = await fetch('/api/warehouse/picks/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ so_number: soNumber, picker_id: pickerId }),
+      });
+      if (!res.ok) return;
+      // Refresh assignments after change
+      const assignRes = await fetch('/api/warehouse/picks/assign');
+      if (assignRes.ok) {
+        const d = await assignRes.json();
+        setAssignments(d.assignments ?? {});
+      }
+    } catch { /* silent */ } finally {
+      setAssigningKey(null);
+    }
+  }, []);
+
   const displayedBranch = selectedBranch || 'All Branches';
 
   return (
@@ -118,7 +173,7 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
           <div>
             <h1 className="text-2xl font-bold text-cyan-400">Warehouse Board</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Stats refreshed {lastRefresh.toLocaleTimeString()} · auto-updates every 60s
+              Stats refreshed {formatTimeCT(lastRefresh)} CT · auto-updates every 60s
             </p>
           </div>
           {isAdmin && stats.length > 1 && (
@@ -236,6 +291,7 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
                     <th className="px-4 py-2 text-left font-medium">Handling</th>
                     <th className="px-4 py-2 text-left font-medium">Status</th>
                     {isAdmin && <th className="px-4 py-2 text-left font-medium">Branch</th>}
+                    <th className="px-4 py-2 text-left font-medium">Assign Picker</th>
                     <th className="px-4 py-2 text-left font-medium">Ship Via</th>
                     <th className="px-4 py-2 text-left font-medium">Expect</th>
                     <th className="px-4 py-2 text-right font-medium">Lines</th>
@@ -280,14 +336,32 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
                       {isAdmin && (
                         <td className="px-4 py-2.5 text-xs text-gray-500">{p.system_id}</td>
                       )}
+                      <td className="px-4 py-2.5">
+                        {pickers.length > 0 ? (
+                          <select
+                            value={assignments[p.so_number]?.picker_id ?? ''}
+                            disabled={assigningKey === p.so_number}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleAssign(p.so_number, val ? Number(val) : null);
+                            }}
+                            className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-white disabled:opacity-50 min-w-[110px]"
+                          >
+                            <option value="">— unassigned —</option>
+                            {pickers.map((pk) => (
+                              <option key={pk.id} value={pk.id}>{pk.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-gray-600">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-xs text-gray-400">
                         {p.ship_via ?? '—'}
                         {p.driver && <div className="text-[10px] text-gray-600">{p.driver}</div>}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap">
-                        {p.expect_date
-                          ? new Date(p.expect_date).toLocaleDateString()
-                          : '—'}
+                        {formatDateCT(p.expect_date)}
                       </td>
                       <td className="px-4 py-2.5 text-right text-gray-300 font-mono text-xs">
                         {p.line_count}

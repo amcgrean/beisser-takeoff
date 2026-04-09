@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { RefreshCw, User, Activity, Clock } from 'lucide-react';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { businessMinutesElapsed } from '@/lib/central-time';
 
 interface ActivePick {
   pick_id: number;
@@ -26,7 +27,7 @@ interface Props { isAdmin: boolean; }
 
 function minutesSince(iso: string | null) {
   if (!iso) return null;
-  return Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
+  return businessMinutesElapsed(iso);
 }
 
 export default function OpenPicksClient({ isAdmin }: Props) {
