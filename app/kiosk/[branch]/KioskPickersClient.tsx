@@ -42,8 +42,7 @@ export default function KioskPickersClient({ branch }: { branch: string }) {
   const loadPickers = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ branch, type: 'picker' });
-      const res = await fetch(`/api/warehouse/pickers?${params}`);
+      const res = await fetch(`/api/kiosk/pickers?branch=${encodeURIComponent(branch)}`);
       if (res.ok) {
         const data = await res.json() as { pickers: Picker[] };
         setPickers(data.pickers ?? []);
