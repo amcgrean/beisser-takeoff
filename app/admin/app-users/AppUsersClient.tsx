@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, RefreshCw, Pencil, Trash2, X, Check, Shield, Truck, ShoppingCart,
-         Package, AlertCircle, UserCheck, UserX } from 'lucide-react';
+         Package, AlertCircle, UserCheck, UserX, Info } from 'lucide-react';
+import Link from 'next/link';
 
 const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 
@@ -165,11 +166,22 @@ export default function AppUsersClient() {
     <div className="min-h-screen bg-gray-950 text-white p-6">
       <div className="max-w-5xl mx-auto space-y-5">
 
+        {/* Context banner */}
+        <div className="flex items-start gap-2.5 p-3.5 bg-amber-500/5 border border-amber-500/20 rounded-xl text-sm text-gray-400">
+          <Info className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+          <span>
+            These users log in via <span className="text-gray-200 font-medium">email + one-time code (OTP)</span> — used for ops staff who have a company email (dispatch, sales, supervisors, drivers).
+            Yard/warehouse employees who use a shared terminal or don&apos;t have email belong in{' '}
+            <Link href="/admin/users" className="text-cyan-400 underline underline-offset-2">LiveEdge Users</Link>{' '}
+            and log in with a username + password instead.
+          </span>
+        </div>
+
         {/* Header */}
         <div className="flex flex-wrap gap-3 items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-cyan-400">App Users</h1>
-            <p className="text-sm text-gray-500 mt-0.5">OTP auth users for WH-Tracker modules</p>
+            <h1 className="text-2xl font-bold text-cyan-400">Ops Users (OTP)</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Email + one-time-code login for dispatch, sales, and ops staff</p>
           </div>
           <div className="flex gap-2">
             <button onClick={load} disabled={loading} className="p-2 bg-gray-800 hover:bg-gray-700 rounded transition disabled:opacity-50">

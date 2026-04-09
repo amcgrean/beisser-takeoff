@@ -70,7 +70,7 @@ export const legacyUserType = bidsSchema.table('user_type', {
 export const legacyUser = bidsSchema.table('user', {
   id:                       serial('id').primaryKey(),
   username:                 varchar('username', { length: 150 }).notNull().unique(),
-  email:                    varchar('email', { length: 150 }).notNull().unique(),
+  email:                    varchar('email', { length: 150 }).unique(),
   password:                 varchar('password', { length: 255 }).notNull(),
   usertypeId:               integer('usertype_id')
                               .notNull()
@@ -92,6 +92,8 @@ export const legacyUser = bidsSchema.table('user', {
   isResidentialEstimator:   boolean('is_residential_estimator').default(false),
   isDesigner:               boolean('is_designer').default(false),
   isPurchasing:             boolean('is_purchasing').default(false),
+  isWarehouse:              boolean('is_warehouse').default(false),
+  isReceivingYard:          boolean('is_receiving_yard').default(false),
   loginCount:               integer('login_count').default(0),
 });
 

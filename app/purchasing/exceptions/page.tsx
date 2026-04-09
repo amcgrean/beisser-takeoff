@@ -8,6 +8,7 @@ export const metadata = { title: 'Purchasing Exceptions' };
 export default async function ExceptionsPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  if ((session.user.roles ?? []).includes('receiving_yard')) redirect('/purchasing');
 
   const isAdmin =
     session.user.role === 'admin' ||

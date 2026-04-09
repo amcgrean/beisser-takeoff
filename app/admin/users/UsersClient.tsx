@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Plus, RefreshCw, Pencil, Trash2, X, Check, Shield, Eye, KeyRound, ShoppingCart } from 'lucide-react';
+import { Plus, RefreshCw, Pencil, Trash2, X, Check, Shield, Eye, KeyRound,
+         ShoppingCart, Package, PackageCheck, Info } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '../../../src/lib/utils';
 import { useSession } from 'next-auth/react';
 
 interface AppUser {
   id: string;
-  email: string;
+  email: string | null;
   name: string;
   role: string;
   isActive: boolean;
@@ -16,13 +17,15 @@ interface AppUser {
 }
 
 const ROLES = [
-  { value: 'admin', label: 'Admin', icon: <Shield className="w-3 h-3" />, desc: 'Full access, admin panel' },
-  { value: 'estimator', label: 'Estimator', icon: <Pencil className="w-3 h-3" />, desc: 'Create & manage own bids' },
-  { value: 'purchasing', label: 'Purchasing', icon: <ShoppingCart className="w-3 h-3" />, desc: 'PO check-in, open POs, receiving' },
-  { value: 'viewer', label: 'Viewer', icon: <Eye className="w-3 h-3" />, desc: 'Read-only access to bids' },
+  { value: 'admin',     label: 'Admin',     icon: <Shield className="w-3 h-3" />,       desc: 'Full access, admin panel' },
+  { value: 'estimator', label: 'Estimator', icon: <Pencil className="w-3 h-3" />,       desc: 'Create & manage own bids' },
+  { value: 'purchasing',label: 'Purchasing',icon: <ShoppingCart className="w-3 h-3" />, desc: 'PO check-in, open POs, receiving' },
+  { value: 'receiving_yard', label: 'Receiving (Yard)', icon: <PackageCheck className="w-3 h-3" />, desc: 'PO check-in, open POs, review queue — no buyer workspace or management pages' },
+  { value: 'warehouse',     label: 'Warehouse',        icon: <Package className="w-3 h-3" />,      desc: 'Picking board — reserved for future user-based picking' },
+  { value: 'viewer',        label: 'Viewer',           icon: <Eye className="w-3 h-3" />,          desc: 'Read-only access to bids' },
 ];
 
-const EMPTY = { name: '', email: '', role: 'estimator', password: '' };
+const EMPTY = { name: '', email: '', role: 'receiving_yard', password: '' };
 
 export default function UsersClient() {
   const { data: session } = useSession();
@@ -47,20 +50,22 @@ export default function UsersClient() {
   const openCreate = () => { setEditTarget(null); setForm(EMPTY); setFormError(''); setShowForm(true); };
   const openEdit = (u: AppUser) => {
     setEditTarget(u);
-    setForm({ name: u.name, email: u.email, role: u.role, password: '' });
+    setForm({ name: u.name, email: u.email ?? '', role: u.role, password: '' });
     setFormError('');
     setShowForm(true);
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.email.trim()) { setFormError('Name and email are required'); return; }
+    if (!form.name.trim()) { setFormError('Username is required'); return; }
     if (!editTarget && !form.password) { setFormError('Password is required for new users'); return; }
     if (form.password && form.password.length < 8) { setFormError('Password must be at least 8 characters'); return; }
     setSaving(true); setFormError('');
     try {
       const url = editTarget ? `/api/admin/users/${editTarget.id}` : '/api/admin/users';
       const method = editTarget ? 'PUT' : 'POST';
-      const body: Record<string, string> = { name: form.name, email: form.email, role: form.role };
+      const body: Record<string, string | undefined> = { name: form.name, role: form.role };
+      // Only include email if provided; omit entirely when blank so the API treats it as no-email user
+      if (form.email.trim()) body.email = form.email.trim();
       if (form.password) body.password = form.password;
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) { const err = await res.json(); setFormError(err.error ?? 'Failed to save'); return; }
@@ -75,13 +80,27 @@ export default function UsersClient() {
     fetch_();
   };
 
-  const getRoleInfo = (role: string) => ROLES.find((r) => r.value === role) ?? ROLES[1];
+  const getRoleInfo = (role: string) => ROLES.find((r) => r.value === role) ?? ROLES[ROLES.length - 1];
 
   return (
     <div className="max-w-4xl">
+      {/* Context banner */}
+      <div className="flex items-start gap-2.5 mb-5 p-3.5 bg-cyan-500/5 border border-cyan-500/20 rounded-xl text-sm text-slate-400">
+        <Info className="w-4 h-4 text-cyan-400 mt-0.5 shrink-0" />
+        <span>
+          These users log in with a <span className="text-slate-200 font-medium">username + password</span> at{' '}
+          <code className="text-cyan-400 text-xs">/login</code>.
+          Estimators, admins, and yard/warehouse staff belong here.
+          Email is optional — yard employees do not need one.
+          Staff who log in via{' '}
+          <span className="text-slate-200 font-medium">email + OTP</span> are managed under{' '}
+          <Link href="/admin/app-users" className="text-cyan-400 underline underline-offset-2">Ops Users (OTP)</Link>.
+        </span>
+      </div>
+
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-white">Users</h2>
+          <h2 className="text-xl font-bold text-white">LiveEdge Users</h2>
           <p className="text-slate-400 text-sm mt-0.5">{users.filter((u) => u.isActive).length} active users</p>
         </div>
         <div className="flex gap-3">
@@ -119,12 +138,14 @@ export default function UsersClient() {
                       <span className="font-semibold text-white">{u.name}</span>
                       {isSelf && <span className="ml-2 text-[10px] bg-cyan-900/40 text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-700">You</span>}
                     </td>
-                    <td className="text-slate-400 text-sm">{u.email}</td>
+                    <td className="text-slate-400 text-sm">{u.email || <span className="text-slate-600 italic">none</span>}</td>
                     <td>
                       <span className={`flex items-center gap-1.5 w-fit px-2 py-0.5 rounded text-[11px] font-medium capitalize ${
-                        u.role === 'admin' ? 'bg-purple-900/40 text-purple-400 border border-purple-700' :
-                        u.role === 'purchasing' ? 'bg-amber-900/30 text-amber-400 border border-amber-800' :
-                        u.role === 'viewer' ? 'bg-slate-800 text-slate-400' :
+                        u.role === 'admin'          ? 'bg-purple-900/40 text-purple-400 border border-purple-700' :
+                        u.role === 'purchasing'     ? 'bg-amber-900/30 text-amber-400 border border-amber-800' :
+                        u.role === 'receiving_yard' ? 'bg-orange-900/30 text-orange-400 border border-orange-800' :
+                        u.role === 'warehouse'      ? 'bg-green-900/30 text-green-400 border border-green-800' :
+                        u.role === 'viewer'         ? 'bg-slate-800 text-slate-400' :
                         'bg-blue-900/30 text-blue-400 border border-blue-800'
                       }`}>
                         {roleInfo.icon}
@@ -168,13 +189,14 @@ export default function UsersClient() {
                 <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-slate-100 focus:border-cyan-400 focus:outline-none" />
               </div>
-              {!editTarget && (
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Email *</label>
-                  <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-slate-100 focus:border-cyan-400 focus:outline-none" />
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Email <span className="text-slate-600">(optional — yard/warehouse employees do not need one)</span>
+                </label>
+                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="user@beisserlumber.com"
+                  className="w-full px-3 py-2 bg-slate-950/60 border border-slate-700 rounded-lg text-sm text-slate-100 focus:border-cyan-400 focus:outline-none" />
+              </div>
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-2">Role</label>
                 <div className="space-y-2">

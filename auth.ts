@@ -80,8 +80,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const role = user.isAdmin ? 'admin' : user.isEstimator ? 'estimator' : 'viewer';
           const roles: string[] = user.isAdmin
             ? ['admin']
+            : user.isWarehouse
+            ? ['warehouse']
             : user.isPurchasing
             ? ['purchasing']
+            : user.isReceivingYard
+            ? ['receiving_yard']
             : [];
 
           // Track login activity (non-critical)
@@ -93,7 +97,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return {
             id: String(user.id),
             name: user.username,
-            email: user.email || `${user.username}@beisserlumber.com`,
+            email: user.email ?? `${user.username}@beisserlumber.local`,
             role,
             roles,
             branch: null,

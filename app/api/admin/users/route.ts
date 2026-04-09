@@ -21,10 +21,12 @@ async function requireAdmin(session: Session | null) {
   return null;
 }
 
-function deriveRole(row: { isAdmin: boolean | null; isEstimator: boolean | null; isCommercialEstimator: boolean | null; isPurchasing?: boolean | null }): string {
+function deriveRole(row: { isAdmin: boolean | null; isEstimator: boolean | null; isCommercialEstimator: boolean | null; isPurchasing?: boolean | null; isWarehouse?: boolean | null; isReceivingYard?: boolean | null }): string {
   if (row.isAdmin) return 'admin';
   if (row.isEstimator || row.isCommercialEstimator) return 'estimator';
   if (row.isPurchasing) return 'purchasing';
+  if (row.isWarehouse) return 'warehouse';
+  if (row.isReceivingYard) return 'receiving_yard';
   return 'viewer';
 }
 
@@ -44,6 +46,8 @@ export async function GET(_req: NextRequest) {
         isEstimator:           legacyUser.isEstimator,
         isCommercialEstimator: legacyUser.isCommercialEstimator,
         isPurchasing:          legacyUser.isPurchasing,
+        isWarehouse:           legacyUser.isWarehouse,
+        isReceivingYard:       legacyUser.isReceivingYard,
         isActive:              legacyUser.isActive,
         createdAt:             legacyUser.createdAt,
       })
@@ -70,15 +74,15 @@ export async function POST(req: NextRequest) {
   const adminErr = await requireAdmin(session);
   if (adminErr) return adminErr;
 
-  let body: { username?: string; name?: string; email: string; role: string; password: string };
+  let body: { username?: string; name?: string; email?: string; role: string; password: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const username = (body.username ?? body.name ?? '').trim();
-  if (!username || !body.email || !body.password) {
-    return NextResponse.json({ error: 'username, email, and password are required' }, { status: 422 });
+  if (!username || !body.password) {
+    return NextResponse.json({ error: 'username and password are required' }, { status: 422 });
   }
 
-  const validRoles = ['admin', 'estimator', 'purchasing', 'viewer'];
+  const validRoles = ['admin', 'estimator', 'purchasing', 'warehouse', 'receiving_yard', 'viewer'];
   if (!validRoles.includes(body.role)) {
     return NextResponse.json({ error: `role must be one of: ${validRoles.join(', ')}` }, { status: 422 });
   }
@@ -103,20 +107,25 @@ export async function POST(req: NextRequest) {
     if (match) usertypeId = match.id;
 
     const password = await bcrypt.hash(body.password, 12);
-    const isAdmin       = body.role === 'admin';
-    const isEstimator   = body.role === 'estimator';
-    const isPurchasing  = body.role === 'purchasing';
+    const isAdmin          = body.role === 'admin';
+    const isEstimator      = body.role === 'estimator';
+    const isPurchasing     = body.role === 'purchasing';
+    const isWarehouse      = body.role === 'warehouse';
+    const isReceivingYard  = body.role === 'receiving_yard';
+    const email = body.email ? body.email.toLowerCase().trim() : null;
 
     const [user] = await db
       .insert(legacyUser)
       .values({
         username,
-        email: body.email.toLowerCase().trim(),
+        ...(email ? { email } : {}),
         password,
         usertypeId,
         isAdmin,
         isEstimator,
         isPurchasing,
+        isWarehouse,
+        isReceivingYard,
         isCommercialEstimator: false,
         isResidentialEstimator: false,
         isDesigner: false,

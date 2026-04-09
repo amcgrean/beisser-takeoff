@@ -10,6 +10,7 @@ export default async function PurchasingLayout({ children }: { children: React.R
     session.user.role === 'admin' ||
     session.user.role === 'estimator' ||
     roles.includes('purchasing') ||
+    roles.includes('receiving_yard') ||
     roles.some((r) => ['admin', 'supervisor', 'ops', 'purchasing', 'warehouse'].includes(r));
   if (!canAccess) redirect('/');
   return <>{children}</>;

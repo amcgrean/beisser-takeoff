@@ -25,17 +25,20 @@ export async function PUT(
   const userId = parseInt(id, 10);
   if (isNaN(userId)) return NextResponse.json({ error: 'Invalid ID' }, { status: 400 });
 
-  let body: { name?: string; role?: string; isActive?: boolean; password?: string };
+  let body: { name?: string; email?: string; role?: string; isActive?: boolean; password?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
   const update: Record<string, unknown> = { updatedAt: new Date() };
   if (body.name) update.username = body.name.trim();
+  if (body.email !== undefined) update.email = body.email ? body.email.toLowerCase().trim() : null;
   if (body.isActive !== undefined) update.isActive = body.isActive;
   if (body.password) update.password = await bcrypt.hash(body.password, 12);
   if (body.role) {
     update.isAdmin               = body.role === 'admin';
     update.isEstimator           = body.role === 'estimator';
     update.isPurchasing          = body.role === 'purchasing';
+    update.isWarehouse           = body.role === 'warehouse';
+    update.isReceivingYard       = body.role === 'receiving_yard';
     update.isCommercialEstimator = false;
   }
 
@@ -46,16 +49,18 @@ export async function PUT(
       .set(update)
       .where(eq(legacyUser.id, userId))
       .returning({
-        id:          legacyUser.id,
-        username:    legacyUser.username,
-        email:       legacyUser.email,
-        isAdmin:     legacyUser.isAdmin,
-        isEstimator: legacyUser.isEstimator,
-        isPurchasing: legacyUser.isPurchasing,
-        isActive:    legacyUser.isActive,
+        id:           legacyUser.id,
+        username:     legacyUser.username,
+        email:        legacyUser.email,
+        isAdmin:      legacyUser.isAdmin,
+        isEstimator:  legacyUser.isEstimator,
+        isPurchasing:    legacyUser.isPurchasing,
+        isWarehouse:     legacyUser.isWarehouse,
+        isReceivingYard: legacyUser.isReceivingYard,
+        isActive:        legacyUser.isActive,
       });
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const role = updated.isAdmin ? 'admin' : updated.isEstimator ? 'estimator' : updated.isPurchasing ? 'purchasing' : 'viewer';
+    const role = updated.isAdmin ? 'admin' : updated.isEstimator ? 'estimator' : updated.isPurchasing ? 'purchasing' : updated.isWarehouse ? 'warehouse' : updated.isReceivingYard ? 'receiving_yard' : 'viewer';
     return NextResponse.json({
       user: {
         id:    String(updated.id),
