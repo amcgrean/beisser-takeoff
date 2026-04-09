@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { TopNav } from '../../../src/components/nav/TopNav';
 import {
   ArrowLeft,
+  Calculator,
   Save,
   Trash2,
   CheckCircle,
@@ -22,6 +23,7 @@ import Link from 'next/link';
 
 interface TakeoffSession {
   id: string;
+  bidId?: string | null;
   name: string;
   updatedAt: string | null;
   measurements: Record<string, number> | null;
@@ -479,13 +481,24 @@ export default function ManageBidClient({ session }: Props) {
               {/* CTA buttons */}
               {takeoffSessionId ? (
                 <div className="space-y-2">
-                  <Link
-                    href={`/takeoff/${takeoffSessionId}`}
-                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Open Takeoff
-                  </Link>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Link
+                      href={`/takeoff/${takeoffSessionId}`}
+                      className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Open Takeoff
+                    </Link>
+                    {bid.takeoffSession?.bidId ? (
+                      <Link
+                        href={`/estimating?bid=${bid.takeoffSession.bidId}`}
+                        className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg text-sm font-medium transition-colors"
+                      >
+                        <Calculator className="w-4 h-4" />
+                        Open in Estimator
+                      </Link>
+                    ) : null}
+                  </div>
                   <button
                     onClick={async () => {
                       if (!window.confirm('Push all measurement totals to the estimate?')) return;

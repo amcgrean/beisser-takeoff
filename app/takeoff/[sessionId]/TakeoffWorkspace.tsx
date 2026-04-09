@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { TakeoffCanvas } from '@/components/takeoff/TakeoffCanvas';
 import { TakeoffToolbar } from '@/components/takeoff/TakeoffToolbar';
 import { PageNavigator } from '@/components/takeoff/PageNavigator';
@@ -29,11 +30,13 @@ export function TakeoffWorkspace({ sessionId }: Props) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [showCalibration, setShowCalibration] = useState<string | null>(null); // viewport ID
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [sendToEstimateStatus, setSendToEstimateStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [scrollMode, setScrollMode] = useState<'zoom' | 'pan'>('zoom');
   const [showThumbnails, setShowThumbnails] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [thumbnailStripHeight, setThumbnailStripHeight] = useState(108);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendToEstimateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resizingSidebarRef = useRef(false);
   const resizingStripRef = useRef(false);
 
@@ -134,6 +137,14 @@ export function TakeoffWorkspace({ sessionId }: Props) {
   }, [sessionId, state.sessionId, state.isLoading, pdfData]);
 
   // Keyboard shortcuts
+  useEffect(() => {
+    return () => {
+      if (sendToEstimateTimerRef.current) {
+        clearTimeout(sendToEstimateTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -255,24 +266,25 @@ export function TakeoffWorkspace({ sessionId }: Props) {
     if (!state.sessionId) return;
     if (!window.confirm('Push all measurement totals to the linked estimate? This overwrites any manually entered values.')) return;
 
+    setSendToEstimateStatus('sending');
+    if (sendToEstimateTimerRef.current) {
+      clearTimeout(sendToEstimateTimerRef.current);
+    }
+
     try {
       const res = await fetch(`/api/takeoff/sessions/${state.sessionId}/send-to-estimate`, {
         method: 'POST',
       });
       if (!res.ok) throw new Error('Failed to send to estimate');
-      const data = await res.json();
-      const count = data.updatedFields?.length ?? 0;
-      // If linked to a bid, navigate back to the bid after sending
-      if (state.legacyBidId) {
-        router.push(`/legacy-bids/${state.legacyBidId}?sent=${count}`);
-      } else {
-        window.alert(`Updated ${count} fields on the estimate.`);
-      }
+      setSendToEstimateStatus('success');
+      sendToEstimateTimerRef.current = setTimeout(() => {
+        setSendToEstimateStatus('idle');
+      }, 10000);
     } catch (err) {
       console.error('Send to estimate failed:', err);
-      window.alert('Failed to send to estimate. See console for details.');
+      setSendToEstimateStatus('error');
     }
-  }, [state.sessionId, state.legacyBidId, router]);
+  }, [state.sessionId]);
 
   // Resize handles (sidebar + page strip)
   useEffect(() => {
@@ -355,6 +367,28 @@ export function TakeoffWorkspace({ sessionId }: Props) {
         onUndo={undo}
         onRedo={redo}
       />
+
+      {sendToEstimateStatus === 'success' && state.bidId && (
+        <div className="px-4 pt-3">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-100">
+            <span>Measurements sent. </span>
+            <Link
+              href={`/estimating?bid=${state.bidId}`}
+              className="font-medium text-cyan-300 hover:text-cyan-200 transition-colors"
+            >
+              Open Estimator -&gt;
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {sendToEstimateStatus === 'error' && (
+        <div className="px-4 pt-3">
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            Failed to send measurements to the estimate.
+          </div>
+        </div>
+      )}
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">

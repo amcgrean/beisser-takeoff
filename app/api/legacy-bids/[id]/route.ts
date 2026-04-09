@@ -131,6 +131,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const takeoffRows = await db
       .select({
         sessionId:   schema.takeoffSessions.id,
+        bidId:       schema.takeoffSessions.bidId,
         sessionName: schema.takeoffSessions.name,
         sessionUpdatedAt: schema.takeoffSessions.updatedAt,
         bidInputs:   schema.bids.inputs,
@@ -143,6 +144,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const takeoffSession = takeoffRows.length > 0
       ? {
           id:         takeoffRows[0].sessionId,
+          bidId:      takeoffRows[0].bidId,
           name:       takeoffRows[0].sessionName,
           updatedAt:  takeoffRows[0].sessionUpdatedAt,
           measurements: computeMeasurementSummary(takeoffRows[0].bidInputs),
