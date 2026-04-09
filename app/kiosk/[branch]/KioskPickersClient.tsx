@@ -124,7 +124,7 @@ export default function KioskPickersClient({ branch }: { branch: string }) {
         )}
       </div>
 
-      <div className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6">
+      <div className="flex-1 p-6 max-w-5xl mx-auto w-full space-y-6">
 
         {/* STEP 1: Select picker */}
         {step === 'select-picker' && (
@@ -135,12 +135,12 @@ export default function KioskPickersClient({ branch }: { branch: string }) {
             ) : pickers.length === 0 ? (
               <div className="text-gray-500">No pickers configured for {branch}.</div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 {pickers.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => selectPicker(p)}
-                    className="py-6 px-4 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-xl text-lg font-semibold text-white transition active:scale-95"
+                    className="aspect-square bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-xl text-base font-semibold text-white transition active:scale-95 flex items-center justify-center text-center px-2"
                   >
                     {p.name}
                   </button>
