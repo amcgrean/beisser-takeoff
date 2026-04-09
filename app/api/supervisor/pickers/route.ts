@@ -47,8 +47,8 @@ export async function GET() {
       sql<{ picker_id: number; so_number: string }[]>`
         SELECT picker_id, so_number FROM pick_assignments
       `,
-      sql<{ assigned_to_id: number; wo_id: string; sales_order_number: string }[]>`
-        SELECT assigned_to_id, wo_id, sales_order_number
+      sql<{ assigned_to_id: number; work_order_number: string; sales_order_number: string }[]>`
+        SELECT assigned_to_id, work_order_number, sales_order_number
         FROM work_orders
         WHERE assigned_to_id IS NOT NULL AND completed_at IS NULL AND status != 'Complete'
       `,
@@ -89,7 +89,7 @@ export async function GET() {
       }
       const wo = woAssignMap.get(p.id);
       if (wo) {
-        return { id: p.id, name: p.name, user_type: p.user_type, status: 'assigned', current_task: wo.wo_id, task_type: 'Production (WO)', active_duration_min: 0 };
+        return { id: p.id, name: p.name, user_type: p.user_type, status: 'assigned', current_task: wo.work_order_number, task_type: 'Production (WO)', active_duration_min: 0 };
       }
       return { id: p.id, name: p.name, user_type: p.user_type, status: 'idle', current_task: null, task_type: null, active_duration_min: 0 };
     });
