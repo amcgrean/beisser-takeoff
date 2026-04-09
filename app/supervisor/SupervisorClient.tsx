@@ -115,7 +115,7 @@ export default function SupervisorClient({ isAdmin, userName, userRole }: Props)
                   <th className="px-4 py-2 text-left font-medium">Status</th>
                   <th className="px-4 py-2 text-left font-medium">Task</th>
                   <th className="px-4 py-2 text-left font-medium">Type</th>
-                  <th className="px-4 py-2 text-right font-medium">Duration</th>
+                  <th className="px-4 py-2 text-right font-medium">Biz Hrs Duration</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,8 +158,8 @@ export default function SupervisorClient({ isAdmin, userName, userRole }: Props)
                 <tr className="text-xs text-gray-500 border-b border-gray-700">
                   <th className="px-4 py-2 text-left font-medium">Picker</th>
                   <th className="px-4 py-2 text-left font-medium">SO #</th>
-                  <th className="px-4 py-2 text-left font-medium">Started</th>
-                  <th className="px-4 py-2 text-left font-medium">Completed</th>
+                  <th className="px-4 py-2 text-left font-medium">Started (CT)</th>
+                  <th className="px-4 py-2 text-left font-medium">Completed (CT)</th>
                 </tr>
               </thead>
               <tbody>

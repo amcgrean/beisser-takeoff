@@ -120,7 +120,7 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
     } catch { /* silent */ }
   }, []);
 
-  // Auto-load picks for the selected branch
+  // Auto-load picks + assignment data for the selected branch
   useEffect(() => {
     loadPicks(selectedBranch);
     loadAssignmentData();
@@ -140,8 +140,7 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
   );
 
   const handleAssign = useCallback(async (soNumber: string, pickerId: number | null) => {
-    const key = soNumber;
-    setAssigningKey(key);
+    setAssigningKey(soNumber);
     try {
       const res = await fetch('/api/warehouse/picks/assign', {
         method: 'POST',
@@ -149,7 +148,6 @@ export default function WarehouseClient({ initialStats, isAdmin, userBranch, use
         body: JSON.stringify({ so_number: soNumber, picker_id: pickerId }),
       });
       if (!res.ok) return;
-      // Refresh assignments after change
       const assignRes = await fetch('/api/warehouse/picks/assign');
       if (assignRes.ok) {
         const d = await assignRes.json();
