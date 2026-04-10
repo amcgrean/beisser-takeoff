@@ -26,12 +26,18 @@ interface Props {
   onDone: () => void;
 }
 
+const IDLE_TIMEOUT = 10; // seconds before returning to picker selection
+
 export default function KioskScanClient({ branch, picker, pickTypeId, pickTypeName, onDone }: Props) {
   const [barcode, setBarcode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [lastResult, setLastResult] = useState<ScanResult | null>(null);
   const [history, setHistory] = useState<ScanResult[]>([]);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -41,6 +47,29 @@ export default function KioskScanClient({ branch, picker, pickTypeId, pickTypeNa
   useEffect(() => {
     if (!scanning) inputRef.current?.focus();
   }, [scanning]);
+
+  const startCountdown = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setCountdown(IDLE_TIMEOUT);
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(intervalRef.current!);
+          intervalRef.current = null;
+          // Schedule onDone after state settles
+          setTimeout(() => onDoneRef.current(), 0);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,9 +96,11 @@ export default function KioskScanClient({ branch, picker, pickTypeId, pickTypeNa
         setLastResult(result);
         setHistory((h) => [result, ...h.slice(0, 19)]);
       }
+      startCountdown();
     } catch {
       const errResult: ScanResult = { action: 'completed', message: 'Network error', barcode: raw };
       setLastResult(errResult);
+      startCountdown();
     } finally {
       setScanning(false);
     }
@@ -91,12 +122,19 @@ export default function KioskScanClient({ branch, picker, pickTypeId, pickTypeNa
             {picker.name} · <span className="font-semibold text-white">{pickTypeName}</span>
           </div>
         </div>
-        <button
-          onClick={onDone}
-          className="text-sm text-gray-400 hover:text-white transition px-3 py-1.5 bg-gray-800 rounded"
-        >
-          ← Done
-        </button>
+        <div className="flex items-center gap-3">
+          {countdown !== null && (
+            <div className="text-sm text-gray-400">
+              Back in <span className="font-bold text-white">{countdown}s</span>
+            </div>
+          )}
+          <button
+            onClick={onDone}
+            className="text-sm text-gray-400 hover:text-white transition px-3 py-1.5 bg-gray-800 rounded"
+          >
+            ← Done
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 p-6 max-w-2xl mx-auto w-full space-y-6">
@@ -108,7 +146,7 @@ export default function KioskScanClient({ branch, picker, pickTypeId, pickTypeNa
               ref={inputRef}
               type="text"
               value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
+              onChange={(e) => { setBarcode(e.target.value); if (countdown !== null) startCountdown(); }}
               disabled={scanning}
               placeholder="e.g. 123456 or 123456-1"
               className="flex-1 bg-gray-800 border border-gray-600 rounded-xl px-4 py-4 text-xl font-mono text-white placeholder-gray-600 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
