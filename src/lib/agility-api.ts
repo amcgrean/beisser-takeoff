@@ -15,7 +15,7 @@
  *   const result = await agilityApi.call('Inventory', 'ItemPriceAndAvailabilityList', { ... })
  *
  * Env vars required:
- *   AGILITY_API_URL      — base URL, e.g. https://your-agility-host.com/
+ *   AGILITY_API_URL      — full base URL including path, e.g. https://api-1390-1.dmsi.com/AgilityPublic/rest/
  *   AGILITY_USERNAME     — Agility user with API access
  *   AGILITY_PASSWORD     — password for that user
  *   AGILITY_BRANCH       — default branch code (e.g. "20GR") — optional, falls back to login default
@@ -133,7 +133,8 @@ function isSessionValid(session: AgilitySession): boolean {
 async function login(branchKey: string = ''): Promise<AgilitySession> {
   const { baseUrl, username, password } = getConfig();
 
-  const url = `${baseUrl}AgilityPublic/rest/Session/Login`;
+  // AGILITY_API_URL already includes /AgilityPublic/rest/ — append method directly
+  const url = `${baseUrl}Session/Login`;
 
   const body = {
     request: {
@@ -240,7 +241,8 @@ async function callApi<T = Record<string, unknown>>(
 
   const session = await getSession(branchKey);
 
-  const url = `${baseUrl}AgilityPublic/rest/${service}/${method}`;
+  // AGILITY_API_URL already includes /AgilityPublic/rest/ — append service/method directly
+  const url = `${baseUrl}${service}/${method}`;
 
   let res: Response;
   try {
