@@ -16,7 +16,9 @@
  *
  * Env vars required:
  *   AGILITY_API_URL      — full base URL including path, e.g. https://api-1390-1.dmsi.com/AgilityPublic/rest/
- *   AGILITY_USERNAME     — Agility user with API access
+ *   AGILITY_USERNAME     — Agility user with API access. IMPORTANT: must include company domain suffix
+ *                          e.g. "leapi.beisser" (NOT "leapi") — the Agility server requires the full
+ *                          domain-qualified username, the same format used by mobile/app logins.
  *   AGILITY_PASSWORD     — password for that user
  *   AGILITY_BRANCH       — default branch code (e.g. "20GR") — optional, falls back to login default
  */
