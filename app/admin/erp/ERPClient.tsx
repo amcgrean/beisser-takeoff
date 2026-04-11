@@ -13,7 +13,7 @@ interface AgilityTestResult {
   version?: string;
   branchCount?: number;
   branches?: { id: string; name: string }[];
-  steps?: { step: string; ms: number }[];
+  steps?: { step: string; ok: boolean; ms?: number; detail?: string }[];
   error?: string;
   durationMs?: number;
 }
