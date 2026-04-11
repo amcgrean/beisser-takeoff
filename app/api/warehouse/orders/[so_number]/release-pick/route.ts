@@ -4,7 +4,7 @@ import { agilityApi, isAgilityConfigured, BRANCH_MAP, AgilityApiError } from '..
 import { getErpSql } from '../../../../../../db/supabase';
 
 /**
- * POST /api/warehouse/orders/:so/release-pick
+ * POST /api/warehouse/orders/:so_number/release-pick
  *
  * Creates a pick file in Agility for a specific SO from the dispatch board.
  * Same logic as /api/warehouse/picks/create-pick-file but keyed by SO in the URL
@@ -16,7 +16,7 @@ import { getErpSql } from '../../../../../../db/supabase';
  *   printPickTicket?: boolean  — default false
  */
 
-type RouteContext = { params: Promise<{ so: string }> };
+type RouteContext = { params: Promise<{ so_number: string }> };
 
 interface ReleaseBody {
   branchCode: string;
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Agility API not configured' }, { status: 503 });
   }
 
-  const { so: soNumber } = await context.params;
+  const { so_number: soNumber } = await context.params;
   if (!soNumber) return NextResponse.json({ error: 'SO number required' }, { status: 400 });
 
   let body: ReleaseBody;

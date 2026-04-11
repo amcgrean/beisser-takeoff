@@ -63,6 +63,15 @@ async function sendOtpEmail(to: string, code: string): Promise<{ ok: boolean; ms
   return { ok: true, msg: 'sent' };
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`[request-otp] timeout after ${ms}ms at: ${label}`)), ms)
+    ),
+  ]);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -77,12 +86,11 @@ export async function POST(req: NextRequest) {
 
     console.log('[request-otp] step 2: querying app_users');
     // Look up user — vague response if not found (don't reveal whether email exists)
-    const users = await sql`
-      SELECT id FROM app_users
-      WHERE email = ${email}
-        AND is_active = true
-      LIMIT 1
-    `;
+    const users = await withTimeout(
+      sql`SELECT id FROM app_users WHERE email = ${email} AND is_active = true LIMIT 1`,
+      8000,
+      'app_users lookup'
+    );
     console.log('[request-otp] step 3: user lookup done, found', users.length);
 
     if (users.length === 0) {

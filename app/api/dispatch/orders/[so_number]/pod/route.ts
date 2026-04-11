@@ -3,7 +3,7 @@ import { auth } from '../../../../../../auth';
 import { agilityApi, isAgilityConfigured, BRANCH_MAP, AgilityApiError } from '../../../../../../src/lib/agility-api';
 
 /**
- * POST /api/dispatch/orders/:so/pod
+ * POST /api/dispatch/orders/:so_number/pod
  *
  * Records a proof-of-delivery signature in the Agility ERP.
  * Called by the dispatch board or driver app when a delivery is confirmed.
@@ -16,7 +16,7 @@ import { agilityApi, isAgilityConfigured, BRANCH_MAP, AgilityApiError } from '..
  *   signatureDate?: string — yyyy-mm-dd (defaults to today)
  */
 
-type RouteContext = { params: Promise<{ so: string }> };
+type RouteContext = { params: Promise<{ so_number: string }> };
 
 interface PodBody {
   branchCode: string;
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Agility API not configured' }, { status: 503 });
   }
 
-  const { so: soNumber } = await context.params;
+  const { so_number: soNumber } = await context.params;
 
   let body: PodBody;
   try {
