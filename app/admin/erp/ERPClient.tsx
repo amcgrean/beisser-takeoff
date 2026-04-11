@@ -5,7 +5,7 @@ import { RefreshCw, Database, Play, ChevronDown, ChevronRight, Check, X, Eye, Za
 
 interface AgilityStatusResult {
   configured: boolean;
-  vars: Record<string, boolean>;
+  envVars: Record<string, boolean | string>;
 }
 
 interface AgilityTestResult {
@@ -158,11 +158,14 @@ export default function ERPClient() {
               )}
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              {Object.entries(agilityStatus.vars).map(([key, present]) => (
-                <span key={key} className={`px-2 py-1 rounded ${present ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
-                  {key}: {present ? 'Set' : 'Missing'}
-                </span>
-              ))}
+              {Object.entries(agilityStatus.envVars ?? {}).map(([key, val]) => {
+                const present = typeof val === 'boolean' ? val : !!val;
+                return (
+                  <span key={key} className={`px-2 py-1 rounded ${present ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                    {key}: {typeof val === 'string' && !present ? 'Missing' : typeof val === 'string' ? val : present ? 'Set' : 'Missing'}
+                  </span>
+                );
+              })}
             </div>
           </div>
         ) : (
