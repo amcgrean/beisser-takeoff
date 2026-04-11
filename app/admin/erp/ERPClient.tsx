@@ -220,9 +220,21 @@ export default function ERPClient() {
                 )}
               </div>
             ) : (
-              <div className="flex items-start gap-2 text-red-300 text-sm">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                {agilityTestResult.error ?? 'Test failed'}
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 text-red-300 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  {agilityTestResult.error ?? 'Test failed'}
+                </div>
+                {agilityTestResult.steps && agilityTestResult.steps.length > 0 && (
+                  <div className="space-y-1 mt-2">
+                    {agilityTestResult.steps.map((s) => (
+                      <div key={s.step} className={`text-xs px-2 py-1 rounded flex items-start gap-2 ${s.ok ? 'text-green-400' : 'text-red-400 bg-red-900/20'}`}>
+                        <span className="font-mono font-medium shrink-0">{s.step}:</span>
+                        <span>{s.ok ? `OK (${s.ms}ms)` : (s.detail ?? 'failed')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

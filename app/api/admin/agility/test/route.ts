@@ -49,12 +49,10 @@ export async function POST(req: NextRequest) {
     await agilityApi.login(body.branch ?? '');
     steps.push({ step: 'Login', ok: true, ms: Date.now() - t });
   } catch (err) {
-    steps.push({
-      step: 'Login',
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    });
-    return NextResponse.json({ success: false, steps, totalMs: Date.now() - t0 });
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('[agility/test] Login failed:', detail);
+    steps.push({ step: 'Login', ok: false, detail });
+    return NextResponse.json({ success: false, steps, error: detail, totalMs: Date.now() - t0 });
   }
 
   // Step 2: AgilityVersion
