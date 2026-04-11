@@ -244,7 +244,7 @@ export default function ERPClient() {
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              {Object.entries(status.envVars).map(([key, present]) => (
+              {Object.entries(status.envVars ?? {}).map(([key, present]) => (
                 <span key={key} className={`px-2 py-1 rounded ${present ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
                   {key}: {present ? 'Set' : 'Missing'}
                 </span>
@@ -380,7 +380,7 @@ export default function ERPClient() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-slate-500 border-b border-white/10">
-                      {Object.keys(previewData.rows[0]).map((k) => (
+                      {Object.keys(previewData.rows[0] ?? {}).map((k) => (
                         <th key={k} className="text-left py-2 px-2 whitespace-nowrap">{k}</th>
                       ))}
                     </tr>
