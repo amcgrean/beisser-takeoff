@@ -253,6 +253,27 @@ export default function ManageBidClient({ session }: Props) {
     }
   };
 
+  const handlePromoteQuote = async () => {
+    if (!confirm('Promote this quote to a Sales Order in Agility? This cannot be undone.')) return;
+    setErpLoading(true);
+    setErpError('');
+    setErpSuccess('');
+    try {
+      const res = await fetch(`/api/legacy-bids/${bidId}/promote-quote`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setErpError(data.error ?? 'Promotion failed');
+        return;
+      }
+      setErpSuccess(data.message ?? 'Quote promoted to Sales Order');
+      fetchBid();
+    } catch {
+      setErpError('Network error — could not reach server');
+    } finally {
+      setErpLoading(false);
+    }
+  };
+
   const handlePushToErp = async () => {
     setErpLoading(true);
     setErpError('');
@@ -671,6 +692,18 @@ export default function ManageBidClient({ session }: Props) {
                   <span className="text-gray-400">Sales Order #</span>
                   <span className="font-mono text-green-300">{bid.agilitySoId}</span>
                 </div>
+              )}
+
+              {/* Promote Quote → SO button */}
+              {bid.agilityQuoteId && !bid.agilitySoId && (
+                <button
+                  onClick={handlePromoteQuote}
+                  disabled={erpLoading}
+                  className="flex items-center justify-center gap-2 w-full py-2 bg-green-900/40 hover:bg-green-900/60 disabled:opacity-50 text-green-300 border border-green-800/50 rounded-lg text-sm transition-colors"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {erpLoading ? 'Promoting…' : 'Promote Quote → Sales Order'}
+                </button>
               )}
               {bid.erpPushedAt && (
                 <p className="text-xs text-gray-600">

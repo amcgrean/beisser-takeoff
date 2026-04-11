@@ -1,7 +1,22 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Database, Play, ChevronDown, ChevronRight, Check, X, Eye } from 'lucide-react';
+import { RefreshCw, Database, Play, ChevronDown, ChevronRight, Check, X, Eye, Zap, AlertCircle } from 'lucide-react';
+
+interface AgilityStatusResult {
+  configured: boolean;
+  vars: Record<string, boolean>;
+}
+
+interface AgilityTestResult {
+  success: boolean;
+  version?: string;
+  branchCount?: number;
+  branches?: { id: string; name: string }[];
+  steps?: { step: string; ms: number }[];
+  error?: string;
+  durationMs?: number;
+}
 
 interface TableInfo {
   schema: string;
@@ -29,6 +44,32 @@ export default function ERPClient() {
   const [previewData, setPreviewData] = useState<{ table: string; rows: Record<string, unknown>[] } | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
 
+  // Agility API state
+  const [agilityStatus, setAgilityStatus] = useState<AgilityStatusResult | null>(null);
+  const [agilityTestResult, setAgilityTestResult] = useState<AgilityTestResult | null>(null);
+  const [testingAgility, setTestingAgility] = useState(false);
+  const [loadingAgilityStatus, setLoadingAgilityStatus] = useState(true);
+
+  const fetchAgilityStatus = useCallback(async () => {
+    setLoadingAgilityStatus(true);
+    try {
+      const res = await fetch('/api/admin/agility/status');
+      if (res.ok) setAgilityStatus(await res.json());
+    } finally { setLoadingAgilityStatus(false); }
+  }, []);
+
+  const handleTestAgility = async () => {
+    setTestingAgility(true);
+    setAgilityTestResult(null);
+    try {
+      const res = await fetch('/api/admin/agility/test', { method: 'POST' });
+      const data = await res.json();
+      setAgilityTestResult(data);
+    } catch (err) {
+      setAgilityTestResult({ success: false, error: err instanceof Error ? err.message : 'Network error' });
+    } finally { setTestingAgility(false); }
+  };
+
   const fetchStatus = useCallback(async () => {
     setLoadingStatus(true);
     try {
@@ -48,7 +89,7 @@ export default function ERPClient() {
     } finally { setLoadingTables(false); }
   }, []);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+  useEffect(() => { fetchStatus(); fetchAgilityStatus(); }, [fetchStatus, fetchAgilityStatus]);
 
   const handleIntrospect = () => { fetchTables(); };
 
@@ -88,6 +129,101 @@ export default function ERPClient() {
             <RefreshCw className={`w-4 h-4 ${loadingStatus ? 'animate-spin' : ''}`} />
           </button>
         </div>
+      </div>
+
+      {/* ── Agility ERP API Card ───────────────────────────────────────────── */}
+      <div className="admin-card p-4 mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Zap className="w-4 h-4 text-amber-400" /> Agility ERP API
+          </h3>
+          <button onClick={fetchAgilityStatus} className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800">
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingAgilityStatus ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {loadingAgilityStatus ? (
+          <div className="text-slate-400 text-sm animate-pulse">Loading...</div>
+        ) : agilityStatus ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              {agilityStatus.configured ? (
+                <span className="flex items-center gap-1 text-green-400 text-sm">
+                  <Check className="w-4 h-4" /> API credentials configured
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-amber-400 text-sm">
+                  <AlertCircle className="w-4 h-4" /> Not configured — set AGILITY_API_URL, AGILITY_USERNAME, AGILITY_PASSWORD
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              {Object.entries(agilityStatus.vars).map(([key, present]) => (
+                <span key={key} className={`px-2 py-1 rounded ${present ? 'bg-green-900/30 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                  {key}: {present ? 'Set' : 'Missing'}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-red-400 text-sm">Failed to load Agility status</div>
+        )}
+
+        {/* Test button */}
+        <div className="mt-4">
+          <button
+            onClick={handleTestAgility}
+            disabled={testingAgility || !agilityStatus?.configured}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-800/60 hover:bg-amber-700/60 disabled:opacity-40 text-amber-200 border border-amber-700/50 rounded-lg text-sm font-medium transition"
+          >
+            {testingAgility ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            {testingAgility ? 'Testing...' : 'Test Live Connection'}
+          </button>
+          {!agilityStatus?.configured && (
+            <p className="text-xs text-slate-500 mt-1">Set env vars to enable live test.</p>
+          )}
+        </div>
+
+        {/* Test result */}
+        {agilityTestResult && (
+          <div className={`mt-4 rounded-lg border p-3 ${agilityTestResult.success ? 'border-green-700 bg-green-900/20' : 'border-red-700 bg-red-900/20'}`}>
+            {agilityTestResult.success ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                  <Check className="w-4 h-4" /> Connection successful
+                  {agilityTestResult.durationMs && (
+                    <span className="text-green-600 font-normal">{agilityTestResult.durationMs}ms</span>
+                  )}
+                </div>
+                {agilityTestResult.version && (
+                  <div className="text-xs text-slate-300">Version: <span className="text-white font-mono">{agilityTestResult.version}</span></div>
+                )}
+                {agilityTestResult.branches && agilityTestResult.branches.length > 0 && (
+                  <div className="text-xs text-slate-400">
+                    Branches ({agilityTestResult.branchCount}):
+                    <span className="ml-1 text-slate-300">
+                      {agilityTestResult.branches.map((b) => `${b.id} (${b.name})`).join(', ')}
+                    </span>
+                  </div>
+                )}
+                {agilityTestResult.steps && (
+                  <div className="flex gap-3 flex-wrap mt-1">
+                    {agilityTestResult.steps.map((s) => (
+                      <span key={s.step} className="text-xs text-slate-500">
+                        {s.step}: <span className="text-slate-400">{s.ms}ms</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-red-300 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                {agilityTestResult.error ?? 'Test failed'}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Status Card */}

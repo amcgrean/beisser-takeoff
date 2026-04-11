@@ -232,7 +232,7 @@ function invalidateSession(branchKey: string): void {
 async function callApi<T = Record<string, unknown>>(
   service: string,
   method: string,
-  body: Record<string, unknown>,
+  body: object,
   options: { branch?: string; retrying?: boolean } = {}
 ): Promise<T & { ReturnCode: number; MessageText: string }> {
   const { baseUrl } = getConfig();
