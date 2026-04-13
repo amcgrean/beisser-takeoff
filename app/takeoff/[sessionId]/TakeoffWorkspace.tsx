@@ -30,6 +30,8 @@ export function TakeoffWorkspace({ sessionId }: Props) {
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [showCalibration, setShowCalibration] = useState<string | null>(null); // viewport ID
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading'>('idle');
   const [sendToEstimateStatus, setSendToEstimateStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [scrollMode, setScrollMode] = useState<'zoom' | 'pan'>('zoom');
   const [showThumbnails, setShowThumbnails] = useState(true);
@@ -49,53 +51,93 @@ export function TakeoffWorkspace({ sessionId }: Props) {
   const handlePdfLoad = useCallback(async (file: File) => {
     const buffer = await file.arrayBuffer();
     setPdfData(buffer);
+    setUploadError(null);
+    setUploadProgress('uploading');
+
+    const FILE_MB = file.size / 1024 / 1024;
+    const VERCEL_BODY_LIMIT_MB = 4.5;
 
     // Upload to R2 — try presigned URL first (bypasses Vercel 4.5MB limit),
     // fall back to server-side proxy for smaller files
-    try {
-      let uploaded = false;
+    let uploaded = false;
+    let presignedFailReason: string | null = null;
 
-      // Attempt 1: presigned URL (direct browser → R2)
-      try {
-        const presignRes = await fetch(
-          `/api/takeoff/sessions/${sessionId}/upload?fileName=${encodeURIComponent(file.name)}`
-        );
-        if (presignRes.ok) {
-          const { uploadUrl, storageKey } = await presignRes.json();
+    // Attempt 1: presigned URL (direct browser → R2)
+    try {
+      const presignRes = await fetch(
+        `/api/takeoff/sessions/${sessionId}/upload?fileName=${encodeURIComponent(file.name)}`
+      );
+      if (!presignRes.ok) {
+        presignedFailReason = `presign endpoint returned ${presignRes.status}`;
+      } else {
+        const { uploadUrl, storageKey } = await presignRes.json();
+        try {
           const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
             body: file,
             headers: { 'Content-Type': 'application/pdf' },
           });
           if (uploadRes.ok) {
-            // Confirm upload and update session record
             await fetch(`/api/takeoff/sessions/${sessionId}/upload`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ fileName: file.name, storageKey }),
             });
             uploaded = true;
+          } else {
+            presignedFailReason = `R2 rejected upload with ${uploadRes.status}`;
           }
-        }
-      } catch {
-        // Presigned upload failed (CORS, network, etc.) — try fallback
-      }
-
-      // Attempt 2: server-side proxy (works for files under ~4MB)
-      if (!uploaded) {
-        const formData = new FormData();
-        formData.append('pdf', file);
-        const res = await fetch(`/api/takeoff/sessions/${sessionId}/upload`, {
-          method: 'POST',
-          body: formData,
-        });
-        if (!res.ok) {
-          console.error('PDF upload failed:', await res.text());
+        } catch (putErr) {
+          // Most common cause: R2 bucket CORS not configured to allow this origin.
+          // CORS must be set in Cloudflare dashboard (R2 > bucket > Settings > CORS):
+          //   { "AllowedOrigins": ["https://app.beisser.cloud"],
+          //     "AllowedMethods": ["PUT","GET"], "AllowedHeaders": ["*"] }
+          presignedFailReason = putErr instanceof Error
+            ? `direct-to-R2 upload blocked (${putErr.message}) — likely missing CORS on R2 bucket`
+            : 'direct-to-R2 upload blocked (likely missing CORS on R2 bucket)';
         }
       }
     } catch (err) {
-      console.error('PDF upload failed:', err);
+      presignedFailReason = err instanceof Error ? err.message : 'unknown presign error';
     }
+
+    // Attempt 2: server-side proxy (works for files under ~4.5MB Vercel limit)
+    if (!uploaded) {
+      if (FILE_MB > VERCEL_BODY_LIMIT_MB) {
+        // Proxy fallback will always 413 for files over the platform limit — don't try.
+        const msg =
+          `PDF is ${FILE_MB.toFixed(1)}MB — too large for fallback upload (limit ${VERCEL_BODY_LIMIT_MB}MB). ` +
+          `Direct-to-R2 upload failed: ${presignedFailReason ?? 'unknown reason'}. ` +
+          `Ask an admin to add https://app.beisser.cloud to the R2 bucket CORS policy.`;
+        console.error('[takeoff] PDF upload failed:', msg);
+        setUploadError(msg);
+      } else {
+        try {
+          const formData = new FormData();
+          formData.append('pdf', file);
+          const res = await fetch(`/api/takeoff/sessions/${sessionId}/upload`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            console.error('[takeoff] PDF proxy upload failed:', res.status, body);
+            setUploadError(
+              res.status === 413
+                ? `PDF too large for fallback upload (${FILE_MB.toFixed(1)}MB). Direct-to-R2 is also failing — check R2 CORS config.`
+                : `PDF upload failed (${res.status}). ${presignedFailReason ?? ''}`
+            );
+          } else {
+            uploaded = true;
+          }
+        } catch (err) {
+          console.error('[takeoff] PDF proxy upload threw:', err);
+          setUploadError('PDF upload failed. See browser console for details.');
+        }
+      }
+    }
+
+    setUploadProgress('idle');
 
     // Update session with page count (done via canvas component after PDF loads)
     dispatch({
@@ -109,7 +151,7 @@ export function TakeoffWorkspace({ sessionId }: Props) {
         pageCount: 0, // Will be updated by TakeoffCanvas
       },
     });
-  }, [sessionId, state.sessionName, state.bidId, dispatch]);
+  }, [sessionId, state.sessionName, state.bidId, state.legacyBidId, dispatch]);
 
   // Load PDF from R2 if session has a stored PDF
   useEffect(() => {
@@ -367,6 +409,33 @@ export function TakeoffWorkspace({ sessionId }: Props) {
         onUndo={undo}
         onRedo={redo}
       />
+
+      {uploadProgress === 'uploading' && (
+        <div className="px-4 pt-3">
+          <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-100">
+            Uploading PDF to storage…
+          </div>
+        </div>
+      )}
+
+      {uploadError && (
+        <div className="px-4 pt-3">
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            <div>
+              <div className="font-medium mb-1">PDF upload failed</div>
+              <div className="text-red-200/90">{uploadError}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              className="text-red-200 hover:text-white transition-colors shrink-0"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {sendToEstimateStatus === 'success' && state.bidId && (
         <div className="px-4 pt-3">

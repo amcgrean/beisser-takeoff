@@ -103,12 +103,27 @@ export async function downloadPdf(key: string): Promise<Buffer> {
 }
 
 /**
- * No-op placeholder. R2 does not support PutBucketCorsCommand via the S3 API.
- * CORS must be configured manually in the Cloudflare dashboard:
- *   R2 > bids bucket > Settings > CORS policy:
- *   Allow origin: https://liveedge.vercel.app
- *   Allow methods: PUT, GET
- *   Allow headers: *
+ * No-op placeholder. R2 does not support PutBucketCorsCommand via the S3 API,
+ * so CORS MUST be configured manually in the Cloudflare dashboard:
+ *
+ *   R2 > bids bucket > Settings > CORS policy > paste:
+ *   [
+ *     {
+ *       "AllowedOrigins": [
+ *         "https://app.beisser.cloud",
+ *         "https://liveedge.vercel.app",
+ *         "http://localhost:3000"
+ *       ],
+ *       "AllowedMethods": ["PUT", "GET", "HEAD"],
+ *       "AllowedHeaders": ["*"],
+ *       "ExposeHeaders": ["ETag"],
+ *       "MaxAgeSeconds": 3600
+ *     }
+ *   ]
+ *
+ * Without this, browser-direct presigned-URL uploads will fail the CORS
+ * preflight, and the client falls back to an API proxy that hits Vercel's
+ * 4.5MB body limit (HTTP 413 FUNCTION_PAYLOAD_TOO_LARGE).
  *
  * This function is kept so existing call sites don't need to change.
  */
