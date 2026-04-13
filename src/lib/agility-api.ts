@@ -704,23 +704,41 @@ async function podSignatureCreate(
  * Use ShipmentStatusFlag "D" to mark a delivery as complete from the driver app.
  */
 export interface ShipmentInfoUpdateRequest {
-  OrderID: string;
-  ShipmentNumber: number;      // 0 = SO header; 1+ = specific shipment
-  UpdateAllPickFiles: boolean;
+  OrderID: string | number;
+  ShipmentNumber?: number;      // 0 = SO header; 1+ = specific shipment
+  UpdateAllPickFiles?: boolean;
   UpdateSalesOrder?: boolean;
   ShipmentStatusFlag?: 'L' | 'S' | 'E' | 'D' | 'Loaded' | 'Staged' | 'En Route' | 'Delivered';
   RouteID?: string;
   StopNumber?: number;
   ShipDate?: string;           // yyyy-mm-dd
   RequestedDeliveryDate?: string;
-  Notes?: string;
 }
 
 async function shipmentInfoUpdate(
   request: ShipmentInfoUpdateRequest,
   options: { branch?: string } = {}
 ): Promise<void> {
-  await callApi('Shipments', 'ShipmentInfoUpdate', request, options);
+  // API requires shipment fields nested inside ShipmentInfoRequestJSON dataset
+  await callApi('Shipments', 'ShipmentInfoUpdate', {
+    OrderID: Number(request.OrderID),
+    ShipmentInfoRequestJSON: {
+      dsShipInfoRequest: {
+        dtShipInfoRequest: [
+          {
+            ShipmentNumber:          request.ShipmentNumber ?? 1,
+            UpdateAllPickFiles:      request.UpdateAllPickFiles ?? true,
+            UpdateSalesOrder:        request.UpdateSalesOrder ?? false,
+            RouteID:                 request.RouteID ?? '',
+            StopNumber:              request.StopNumber ?? 0,
+            ShipDate:                request.ShipDate ?? '',
+            RequestedDeliveryDate:   request.RequestedDeliveryDate ?? '',
+            ShipmentStatusFlag:      request.ShipmentStatusFlag ?? '',
+          },
+        ],
+      },
+    },
+  }, options);
 }
 
 /**
