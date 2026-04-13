@@ -6,6 +6,12 @@ import { auth } from '../auth';
 export const metadata: Metadata = {
   title: 'LiveEdge | Estimating',
   description: 'LiveEdge — Internal estimating platform.',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'LiveEdge',
+  },
 };
 
 export const viewport: Viewport = {

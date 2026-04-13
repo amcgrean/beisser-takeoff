@@ -700,6 +700,30 @@ async function podSignatureCreate(
 }
 
 /**
+ * Update shipment status / info.
+ * Use ShipmentStatusFlag "D" to mark a delivery as complete from the driver app.
+ */
+export interface ShipmentInfoUpdateRequest {
+  OrderID: string;
+  ShipmentNumber: number;      // 0 = SO header; 1+ = specific shipment
+  UpdateAllPickFiles: boolean;
+  UpdateSalesOrder?: boolean;
+  ShipmentStatusFlag?: 'L' | 'S' | 'E' | 'D' | 'Loaded' | 'Staged' | 'En Route' | 'Delivered';
+  RouteID?: string;
+  StopNumber?: number;
+  ShipDate?: string;           // yyyy-mm-dd
+  RequestedDeliveryDate?: string;
+  Notes?: string;
+}
+
+async function shipmentInfoUpdate(
+  request: ShipmentInfoUpdateRequest,
+  options: { branch?: string } = {}
+): Promise<void> {
+  await callApi('Shipments', 'ShipmentInfoUpdate', request, options);
+}
+
+/**
  * Get list of shipments with optional filters.
  */
 export interface ShipmentsListRequest {
@@ -873,6 +897,7 @@ export const agilityApi = {
   // Shipments / Picks
   pickFileCreate,
   podSignatureCreate,
+  shipmentInfoUpdate,
   shipmentsList,
 
   // Customers
