@@ -140,7 +140,7 @@ async function login(branchKey: string = ''): Promise<AgilitySession> {
 
   const body = {
     request: {
-      UserName: username,
+      LoginID: username,
       Password: password,
       ...(branchKey ? { Branch: branchKey } : {}),
     },
