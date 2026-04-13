@@ -70,14 +70,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Step 3: BranchList
-  let branches: { Branch: string; BranchName: string; Active: boolean }[] = [];
+  let branches: { id: string; name: string }[] = [];
   try {
     const t = Date.now();
-    branches = await agilityApi.fetchBranchList(branchOption);
+    const rawBranches = await agilityApi.fetchBranchList(branchOption);
+    branches = rawBranches.map((b) => ({ id: b.Branch, name: b.BranchName }));
     steps.push({
       step: 'BranchList',
       ok: true,
-      detail: `${branches.length} branch(es) returned`,
+      detail: `${branches.length} branch(es): ${branches.map((b) => b.id).join(', ')}`,
       ms: Date.now() - t,
     });
   } catch (err) {

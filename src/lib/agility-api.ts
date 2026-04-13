@@ -345,8 +345,11 @@ async function fetchBranchList(options: { branch?: string } = {}): Promise<Branc
  * Get the Agility version string.
  */
 async function fetchVersion(): Promise<string> {
-  const res = await callApi<{ Version: string }>('Session', 'AgilityVersion', {});
-  return res.Version ?? 'unknown';
+  const res = await callApi<Record<string, unknown>>('Session', 'AgilityVersion', {});
+  // Log raw response once so we can confirm the exact field name
+  console.log('[AgilityAPI] AgilityVersion raw response:', JSON.stringify(res));
+  // DMSi may return Version, AgilityVersion, or VersionNumber — check all
+  return (res.Version ?? res.AgilityVersion ?? res.VersionNumber ?? 'unknown') as string;
 }
 
 /**
