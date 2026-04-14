@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { SalesOrder } from '../api/sales/orders/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { useBranchFilter } from '@/hooks/useBranchFilter';
 
 interface Metrics {
   open_orders_count: number;
@@ -39,7 +40,7 @@ const PERIODS = [7, 30, 90];
 export default function SalesClient({ isAdmin, userBranch, userName, userRole }: Props) {
   usePageTracking();
   const [tab, setTab] = useState<Tab>('hub');
-  const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
+  const [branch, setBranch] = useBranchFilter(isAdmin, userBranch);
   const [period, setPeriod] = useState(30);
 
   // Hub metrics

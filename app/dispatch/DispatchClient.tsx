@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { useBranchFilter } from '@/hooks/useBranchFilter';
 import type { DeliveryStop } from '../api/dispatch/deliveries/route';
 import type { DispatchKpis } from '../api/dispatch/kpis/route';
 import type { OrderLine } from '../api/dispatch/orders/[so_number]/lines/route';
@@ -667,7 +668,7 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
 
   // Filters
   const [date, setDate] = useState(today);
-  const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
+  const [branch, setBranch] = useBranchFilter(isAdmin, userBranch);
   const [search, setSearch] = useState('');
 
   // Data

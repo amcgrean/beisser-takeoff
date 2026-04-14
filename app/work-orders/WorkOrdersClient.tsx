@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenWorkOrder } from '../api/work-orders/open/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { useBranchFilter } from '@/hooks/useBranchFilter';
 
 interface Builder {
   id: number;
@@ -60,7 +61,7 @@ export default function WorkOrdersClient({ isAdmin, userBranch, builders, userNa
   const [tab, setTab] = useState<Tab>('board');
 
   // Board state
-  const [branchFilter, setBranchFilter] = useState(userBranch ?? '');
+  const [branchFilter, setBranchFilter] = useBranchFilter(isAdmin, userBranch);
   const [deptFilter, setDeptFilter] = useState('');
   const [workOrders, setWorkOrders] = useState<OpenWorkOrder[]>([]);
   const [loadingBoard, setLoadingBoard] = useState(false);

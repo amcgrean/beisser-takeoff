@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { OpenPickSummary } from '../api/warehouse/picks/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { useBranchFilter } from '@/hooks/useBranchFilter';
 import { formatTimeCT, formatDateCT } from '@/lib/central-time';
 
 interface BranchStats {
@@ -55,9 +56,7 @@ function handlingColor(code: string) {
 export default function WarehouseClient({ initialStats, isAdmin, userBranch, userName, userRole }: Props) {
   usePageTracking();
   const [stats, setStats] = useState<BranchStats[]>(initialStats);
-  const [selectedBranch, setSelectedBranch] = useState<string>(
-    isAdmin ? '' : (userBranch ?? '')
-  );
+  const [selectedBranch, setSelectedBranch] = useBranchFilter(isAdmin, userBranch);
   const [picks, setPicks] = useState<OpenPickSummary[] | null>(null);
   const [loadingPicks, setLoadingPicks] = useState(false);
   const [picksError, setPicksError] = useState('');

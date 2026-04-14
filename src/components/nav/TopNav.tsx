@@ -323,6 +323,7 @@ const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/audit',         label: 'Audit Log' },
   { href: '/admin/erp',           label: 'ERP Sync' },
   { href: '/admin/app-users',     label: 'App Users' },
+  { href: '/admin/analytics',     label: 'Page Analytics' },
 ];
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────

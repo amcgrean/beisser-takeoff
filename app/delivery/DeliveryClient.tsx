@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopNav } from '../../src/components/nav/TopNav';
 import type { DeliveryRecord } from '../api/delivery/tracker/route';
 import { usePageTracking } from '@/hooks/usePageTracking';
+import { useBranchFilter } from '@/hooks/useBranchFilter';
 
 interface Props {
   isAdmin: boolean;
@@ -48,7 +49,7 @@ export default function DeliveryClient({ isAdmin, userBranch, userName, userRole
   usePageTracking();
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
-  const [branch, setBranch] = useState(isAdmin ? '' : (userBranch ?? ''));
+  const [branch, setBranch] = useBranchFilter(isAdmin, userBranch);
   const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
