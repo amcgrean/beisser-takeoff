@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, AlertCircle, Info, CheckCircle, Plus, X, ExternalLink } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Exception = {
   event_type: string;
@@ -52,6 +53,7 @@ const BRANCHES = ['10FD', '20GR', '25BW', '40CV'];
 interface Props { isAdmin: boolean; userBranch: string | null; }
 
 export default function ExceptionsClient({ isAdmin, userBranch }: Props) {
+  usePageTracking();
   const [exceptions, setExceptions] = useState<Exception[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);

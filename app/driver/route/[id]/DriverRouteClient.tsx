@@ -6,6 +6,7 @@ import {
   ChevronLeft, MapPin, CheckCircle2, Camera,
   AlertCircle, RefreshCw, Truck, Package, SkipForward,
 } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Stop {
   id: number;
@@ -48,6 +49,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function DriverRouteClient({ routeId, driverName }: Props) {
+  usePageTracking();
   const router = useRouter();
   const [route, setRoute] = useState<Route | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);

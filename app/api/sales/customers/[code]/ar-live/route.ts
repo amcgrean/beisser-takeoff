@@ -27,6 +27,15 @@ export async function GET(req: NextRequest, context: RouteContext) {
   // ── Mirror table fallback (always available) ──────────────────────────────
   const sql = getErpSql();
 
+  // Resolve cust_key from cust_code (agility_ar_open uses cust_key, not cust_code)
+  type CustKeyRow = { cust_key: string };
+  const [custKeyRow] = await sql<CustKeyRow[]>`
+    SELECT DISTINCT cust_key FROM agility_customers
+    WHERE TRIM(cust_code) = TRIM(${custCode}) AND is_deleted = false
+    LIMIT 1
+  `.catch(() => [] as CustKeyRow[]);
+  const custKey = custKeyRow?.cust_key ?? custCode;
+
   type ArRow = {
     cust_key: string | null;
     ref_num: string | null;
@@ -40,7 +49,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const mirrorRows = await sql<ArRow[]>`
     SELECT cust_key, ref_num, open_amt, open_flag, due_date::text, invoice_date::text, tran_type
     FROM agility_ar_open
-    WHERE cust_key = ${custCode}
+    WHERE cust_key = ${custKey}
       AND open_flag = 'Y'
     ORDER BY due_date NULLS LAST
     LIMIT 100

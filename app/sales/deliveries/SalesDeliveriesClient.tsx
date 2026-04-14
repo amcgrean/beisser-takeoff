@@ -41,8 +41,8 @@ export default function SalesDeliveriesClient({ isAdmin, userBranch, userName, u
       if (branch) p.set('branch', branch);
       const res = await fetch(`/api/delivery/tracker?${p}`);
       if (res.ok) {
-        const d = await res.json() as { records: DeliveryRecord[] };
-        setRecords(d.records ?? []);
+        const d = await res.json() as { deliveries: DeliveryRecord[] };
+        setRecords(d.deliveries ?? []);
       }
     } finally { setLoading(false); }
   }, [date, branch]);

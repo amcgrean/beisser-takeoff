@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Truck, MapPin, ChevronRight, RefreshCw, Package } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Route {
   id: number;
@@ -25,6 +26,7 @@ function today() {
 }
 
 export default function DriverHomeClient({ driverName, branch }: Props) {
+  usePageTracking();
   const router = useRouter();
   const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
