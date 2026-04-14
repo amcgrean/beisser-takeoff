@@ -513,7 +513,7 @@ export interface CreateSalesOrderRequest {
 }
 
 export interface CreateSalesOrderResult {
-  OrderID: string;
+  NewOrderID?: number;  // Confirmed from Postman v619: SalesOrderCreate + QuoteCreate return NewOrderID
   ReturnCode: number;
   MessageText: string;
 }
@@ -578,7 +578,7 @@ export interface CreateQuoteRequest {
 }
 
 export interface QuoteResult {
-  QuoteID: string;
+  NewOrderID?: number;  // Confirmed from Postman v619: QuoteCreate returns NewOrderID (same field as SalesOrderCreate)
   ReturnCode: number;
   MessageText: string;
 }

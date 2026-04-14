@@ -62,8 +62,9 @@ export async function POST(_req: NextRequest, context: RouteContext) {
     }
 
     // Release quote → Sales Order in Agility
-    const result = await agilityApi.quoteRelease(agilityQuoteId, { branch: agilityBranch });
-    const soId = result.OrderID;
+    // QuoteRelease does not return a new SO ID (per Postman v619) — the quote ID becomes the SO ID
+    await agilityApi.quoteRelease(agilityQuoteId, { branch: agilityBranch });
+    const soId = agilityQuoteId;  // quote ID and SO ID are the same in Agility
 
     // Store SO ID on bid
     await db

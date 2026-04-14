@@ -140,7 +140,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const reference = body.reference?.trim() || bid.projectName;
 
     // ── Push to Agility ──────────────────────────────────────────────────────
-    let erpId: string;
+    let erpId: string | undefined;
     let erpType: 'quote' | 'order';
 
     const branchOpt = agilityBranch ? { branch: agilityBranch } : {};
@@ -158,7 +158,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
         },
         branchOpt
       );
-      erpId   = result.QuoteID;
+      if (!result.NewOrderID) throw new Error('Agility did not return a Quote ID');
+      erpId   = String(result.NewOrderID);
       erpType = 'quote';
     } else {
       const result = await agilityApi.salesOrderCreate(
@@ -173,7 +174,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
         },
         branchOpt
       );
-      erpId   = result.OrderID;
+      if (!result.NewOrderID) throw new Error('Agility did not return an Order ID');
+      erpId   = String(result.NewOrderID);
       erpType = 'order';
     }
 
