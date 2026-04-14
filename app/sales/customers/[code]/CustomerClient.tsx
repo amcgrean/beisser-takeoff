@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Building2, MapPin, Phone, RefreshCw, ShoppingCart, History } from 'lucide-react';
+import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Customer {
   cust_key: string;
@@ -54,6 +55,7 @@ const STATUS_COLORS: Record<string, string> = {
 interface Props { code: string; isAdmin: boolean; }
 
 export default function CustomerClient({ code, isAdmin }: Props) {
+  usePageTracking();
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
