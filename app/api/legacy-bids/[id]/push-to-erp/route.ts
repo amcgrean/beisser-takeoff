@@ -97,7 +97,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     // ── Resolve Agility branch from branchCode ──────────────────────────────
     // branchCode (e.g. "20GR") → BRANCH_MAP → Agility internal branch ID
-    // TODO: Update BRANCH_MAP in agility-api.ts once BranchList is confirmed Monday
     const agilityBranch = branchCode ? (BRANCH_MAP[branchCode] ?? branchCode) : '';
 
     // ── Load linked UUID bids record for line items ─────────────────────────

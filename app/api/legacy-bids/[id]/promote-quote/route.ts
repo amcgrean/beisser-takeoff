@@ -44,7 +44,8 @@ export async function POST(_req: NextRequest, context: RouteContext) {
 
     if (rows.length === 0) return NextResponse.json({ error: 'Bid not found' }, { status: 404 });
 
-    const { agilityQuoteId, agilitySoId } = rows[0];
+    const { agilityQuoteId, agilitySoId, branchId } = rows[0];
+    const agilityBranch = branchId ? (BRANCH_MAP[branchId] ?? branchId) : '';
 
     if (!agilityQuoteId) {
       return NextResponse.json(
@@ -61,8 +62,7 @@ export async function POST(_req: NextRequest, context: RouteContext) {
     }
 
     // Release quote → Sales Order in Agility
-    // TODO: Verify branch handling for QuoteRelease — may use session branch from login
-    const result = await agilityApi.quoteRelease(agilityQuoteId);
+    const result = await agilityApi.quoteRelease(agilityQuoteId, { branch: agilityBranch });
     const soId = result.OrderID;
 
     // Store SO ID on bid
