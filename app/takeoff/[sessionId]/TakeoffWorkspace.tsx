@@ -153,29 +153,67 @@ export function TakeoffWorkspace({ sessionId }: Props) {
     });
   }, [sessionId, state.sessionName, state.bidId, state.legacyBidId, dispatch]);
 
-  // Load PDF from R2 if session has a stored PDF
+  // Load PDF from R2 if session has a stored PDF.
+  // Prefer presigned URL (direct-to-R2 fetch) — faster than proxying through
+  // the Vercel serverless function, and avoids function memory pressure on
+  // large plan sets. Fall back to mode=download only if the presigned URL path
+  // fails (e.g., CORS not yet configured).
   useEffect(() => {
     if (pdfData || !state.sessionId) return;
+    if (state.isLoading) return;
+
+    let cancelled = false;
 
     async function loadFromR2() {
       try {
-        const res = await fetch(`/api/takeoff/sessions/${sessionId}/pdf?mode=download`);
-        if (res.ok) {
-          const buffer = await res.arrayBuffer();
-          setPdfData(buffer);
+        // Step 1: ask the API if this session has a PDF and get a presigned URL.
+        const urlRes = await fetch(`/api/takeoff/sessions/${sessionId}/pdf?mode=url`);
+        if (urlRes.status === 404) {
+          // Session genuinely has no PDF — show the upload prompt.
+          if (!cancelled) setShowFileUpload(true);
           return;
         }
+        if (!urlRes.ok) {
+          console.warn('[takeoff] /pdf?mode=url failed:', urlRes.status);
+          if (!cancelled) setShowFileUpload(true);
+          return;
+        }
+
+        const { url } = await urlRes.json();
+
+        // Step 2: fetch the PDF directly from R2.
+        try {
+          const r2Res = await fetch(url);
+          if (r2Res.ok) {
+            const buffer = await r2Res.arrayBuffer();
+            if (!cancelled) setPdfData(buffer);
+            return;
+          }
+          console.warn('[takeoff] direct-from-R2 fetch failed:', r2Res.status);
+        } catch (err) {
+          console.warn('[takeoff] direct-from-R2 fetch threw (CORS?):', err);
+        }
+
+        // Step 3: fall back to streaming through the API (slower but bypasses CORS).
+        const dlRes = await fetch(`/api/takeoff/sessions/${sessionId}/pdf?mode=download`);
+        if (dlRes.ok) {
+          const buffer = await dlRes.arrayBuffer();
+          if (!cancelled) setPdfData(buffer);
+          return;
+        }
+        console.warn('[takeoff] /pdf?mode=download fallback failed:', dlRes.status);
+        if (!cancelled) setShowFileUpload(true);
       } catch (err) {
-        console.warn('No stored PDF found, showing upload prompt:', err);
+        console.warn('[takeoff] PDF load failed, showing upload prompt:', err);
+        if (!cancelled) setShowFileUpload(true);
       }
-      // No stored PDF — show upload prompt
-      setShowFileUpload(true);
     }
 
-    // Wait for session data to load before trying R2
-    if (!state.isLoading) {
-      loadFromR2();
-    }
+    loadFromR2();
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, state.sessionId, state.isLoading, pdfData]);
 
   // Keyboard shortcuts

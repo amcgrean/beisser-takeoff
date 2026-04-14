@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { getDb, schema } from '../../../../../../db/index';
-import { eq } from 'drizzle-orm';
+import { legacyBidFile } from '../../../../../../db/schema-legacy';
+import { eq, desc } from 'drizzle-orm';
 import { getPresignedPdfUrl, downloadPdf } from '@/lib/r2';
 
 function dbError(err: unknown) {
@@ -13,6 +14,55 @@ function dbError(err: unknown) {
   }
   console.error('[takeoff/sessions/[sessionId]/pdf API]', err);
   return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+}
+
+/**
+ * If a session has no pdfStorageKey but is linked to a legacy bid, try to find
+ * the most recent PDF attached to that bid in legacyBidFile. This recovers
+ * sessions whose uploads failed silently (e.g., pre-CORS-fix sessions where the
+ * direct-to-R2 PUT was blocked and the confirm-PUT never ran), and handles
+ * sessions predating the auto-linking logic in start-takeoff.
+ *
+ * When a fallback is found, we also update the session row so subsequent loads
+ * don't need to re-scan legacyBidFile.
+ */
+async function resolvePdfStorageKey(
+  session: typeof schema.takeoffSessions.$inferSelect
+): Promise<{ storageKey: string; fileName: string } | null> {
+  if (session.pdfStorageKey) {
+    return {
+      storageKey: session.pdfStorageKey,
+      fileName: session.pdfFileName || 'plan.pdf',
+    };
+  }
+
+  if (!session.legacyBidId) return null;
+
+  const db = getDb();
+  const files = await db
+    .select()
+    .from(legacyBidFile)
+    .where(eq(legacyBidFile.bidId, session.legacyBidId))
+    .orderBy(desc(legacyBidFile.uploadedAt));
+
+  const pdf = files.find(
+    (f) =>
+      f.fileType?.includes('pdf') ||
+      f.filename.toLowerCase().endsWith('.pdf')
+  );
+  if (!pdf) return null;
+
+  // Auto-link the found PDF back to the session so this fallback only runs once.
+  await db
+    .update(schema.takeoffSessions)
+    .set({
+      pdfStorageKey: pdf.fileKey,
+      pdfFileName: pdf.filename,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.takeoffSessions.id, session.id));
+
+  return { storageKey: pdf.fileKey, fileName: pdf.filename };
 }
 
 // ──────────────────────────────────────────────────────────
@@ -42,25 +92,28 @@ export async function GET(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    if (!session.pdfStorageKey) {
+    const resolved = await resolvePdfStorageKey(session);
+    if (!resolved) {
       return NextResponse.json({ error: 'No PDF uploaded for this session' }, { status: 404 });
     }
 
     if (mode === 'download') {
-      // Stream the PDF directly from R2
-      const buffer = await downloadPdf(session.pdfStorageKey);
+      // Stream the PDF directly from R2 through this serverless function.
+      // Kept as a fallback, but clients should prefer mode=url (presigned
+      // direct-to-R2 GET) to avoid Vercel function memory pressure on large PDFs.
+      const buffer = await downloadPdf(resolved.storageKey);
       return new NextResponse(new Uint8Array(buffer), {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="${session.pdfFileName || 'plan.pdf'}"`,
+          'Content-Disposition': `inline; filename="${resolved.fileName}"`,
           'Cache-Control': 'private, max-age=3600',
         },
       });
     }
 
-    // Default: return presigned URL
-    const url = await getPresignedPdfUrl(session.pdfStorageKey);
-    return NextResponse.json({ url, fileName: session.pdfFileName });
+    // Default: return presigned URL so the browser fetches directly from R2.
+    const url = await getPresignedPdfUrl(resolved.storageKey);
+    return NextResponse.json({ url, fileName: resolved.fileName });
   } catch (err) {
     return dbError(err);
   }
