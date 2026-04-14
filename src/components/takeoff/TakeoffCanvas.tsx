@@ -265,6 +265,47 @@ export function TakeoffCanvas({
     };
   }, [dispatch, scrollMode]);
 
+  // ── Fabric-level wheel backup ──
+  // Fabric.js v7 wraps the lower-canvas in a canvas-container div and attaches
+  // its own event system to the upper-canvas. As a redundant path in case the
+  // capture-phase DOM listener above misses events (e.g., if the container
+  // isn't covering the full visible area or some extension/layer absorbs the
+  // wheel), we also listen to Fabric's own mouse:wheel event, which fires
+  // directly from Fabric's handler on the upper-canvas.
+  useEffect(() => {
+    const fabricCanvas = fabricInstanceRef.current;
+    if (!fabricCanvas) return;
+
+    function onFabricWheel(opt: { e: WheelEvent }) {
+      const e = opt.e;
+      const el = containerRef.current;
+      if (!fabricCanvas || !el) return;
+
+      const rect = el.getBoundingClientRect();
+      const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+      if (scrollMode === 'zoom' || e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = -e.deltaY / 500;
+        const currentZoom = fabricCanvas.getZoom();
+        const newZoom = Math.min(Math.max(currentZoom + delta, 0.1), 10);
+        setCanvasZoom(fabricCanvas, newZoom, pt);
+        lastCanvasZoomRef.current = newZoom;
+        dispatch({ type: 'SET_ZOOM', payload: newZoom });
+      } else {
+        e.preventDefault();
+        const dx = e.shiftKey ? -e.deltaY : -e.deltaX;
+        const dy = e.shiftKey ? 0 : -e.deltaY;
+        panCanvas(fabricCanvas, dx, dy);
+      }
+    }
+
+    fabricCanvas.on('mouse:wheel', onFabricWheel as unknown as (...args: unknown[]) => void);
+    return () => {
+      fabricCanvas.off('mouse:wheel', onFabricWheel as unknown as (...args: unknown[]) => void);
+    };
+  }, [dispatch, scrollMode]);
+
   // ── Sync external zoom changes (BottomBar buttons) to the Fabric canvas ──
   useEffect(() => {
     const fabricCanvas = fabricInstanceRef.current;
@@ -867,7 +908,7 @@ export function TakeoffCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 overflow-hidden bg-slate-950"
+      className="absolute inset-0 overflow-hidden bg-slate-950"
       style={{ cursor: spaceHeldRef.current ? 'grab' : 'default' }}
     >
       {/* Loading overlay */}
