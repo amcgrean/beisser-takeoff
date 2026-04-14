@@ -282,6 +282,57 @@ Full WH-Tracker (Python/Flask) migration into LiveEdge. All modules ported:
 5. **Suggested Buys**: `app_purchasing_queue` confirmed missing. Check `erp_mirror_suggested_po_header` + `erp_mirror_suggested_po_detail` before building `/purchasing/suggested-buys`
 6. **Flask sunset**: DNS cutover + archive `C:\Users\amcgrean\python\wh-tracker-fly\WH-Tracker` after testing confirms parity
 
+## Takeoff Debugging (in progress, 2026-04-14)
+
+Branch: `claude/debug-taokeoff-errors-NngpH` (merged to `main`)
+
+### Fixes landed on main
+| Commit | Fix |
+|--------|-----|
+| `3b3e648` | Upload error banner, manifest icon 404 |
+| `003283f` | Existing-session PDFs now recover via `legacyBidFile` fallback in `/api/takeoff/sessions/[id]/pdf`; client prefers mode=url (direct R2 fetch) over mode=download |
+| `7e6a770` | Replaced `next/dynamic({ ssr:false })` with hand-rolled mount gate in `TakeoffWorkspaceLoader` — fixes React #418 text-node hydration mismatch |
+| `14c6f38` | Wheel listener switched to capture phase with `stopPropagation` |
+| `0eb55fc` | `TakeoffCanvas` root changed from `relative flex-1` → `absolute inset-0` (parent wasn't `display:flex`, so `flex-1` was a no-op and container collapsed to content height, leaving a 240px dead zone where wheel events didn't reach the listener). Also added Fabric `mouse:wheel` backup listener. |
+| `4b725db` | Preset tool activation (type normalization `'polyline'↔'linear'`, `'polygon'↔'area'`) + default fit-to-page zoom via `zoom:0` sentinel + explicit fit in `renderCurrentPage` |
+
+### Infra action already taken
+- **R2 CORS configured** by user in Cloudflare dashboard to allow `https://app.beisser.cloud` for PUT/GET/HEAD.
+
+### Open bugs — next agent should tackle in order
+
+1. **Scroll/pan still not working without a markup selected** (primary). User reports: wheel-zoom only works while a Fabric object is selected. When nothing selected, wheel does nothing. The layout fix (`0eb55fc`) and capture-phase listener should have resolved it but haven't. Next steps:
+   - Ask user to open DevTools on `/takeoff/[sessionId]` on app.beisser.cloud, scroll, and report: (a) any console errors, (b) computed dimensions of `div.takeoff-canvas` vs its parent, (c) element under cursor (`document.elementFromPoint`) when scrolling.
+   - Hypothesis to verify: `div.takeoff-canvas` has `pointer-events: none` or is being covered by a sibling with higher z-index when no selection exists.
+   - Consider attaching wheel listener at `document` or `window` level with a descendant check, bypassing any layering issues.
+
+2. **PDF canvas may not fully stretch**. Playwright test (done locally, not in CI) showed `pdf-canvas` sizing to 300×150 (canvas default intrinsic) despite `absolute inset-0`. After `renderPage` sets `canvas.width/height` to viewport dims, behavior may differ. Verify in real browser and add explicit `style={{ width: '100%', height: '100%' }}` on the canvas elements if needed.
+
+3. **Default viewport scale = 1/4"=1'** (feature ask, not a bug). User wants new viewports to default-calibrate to 1/4" scale. Currently they're created uncalibrated. See `src/components/takeoff/ScaleCalibration.tsx` + `src/lib/takeoff/calculations.ts` for scale presets. Likely fix: auto-set `pixelsPerUnit` + `scaleName` when a viewport is first created in `TakeoffCanvas.tsx` viewport tool handler.
+
+### Debugging tooling available locally
+- Playwright + headless Chromium are installed: `/opt/pw-browsers/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell`. Useful for DOM-level wheel-event and layout repros. Example pattern:
+  ```js
+  import { chromium } from 'playwright';
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/...' });
+  // serve node_modules over http so you can `import { Canvas } from '/fabric/dist/index.mjs'`
+  ```
+  This lets you test the exact Fabric v7 DOM reshuffle behavior without running the full Next.js app. Past test confirmed capture-phase wheel listener fires correctly when container fills its parent.
+
+### Key files for takeoff work
+- `app/takeoff/[sessionId]/page.tsx` — async server component, auth gate
+- `app/takeoff/[sessionId]/TakeoffWorkspaceLoader.tsx` — manual mount gate (replaces `next/dynamic`)
+- `app/takeoff/[sessionId]/TakeoffWorkspace.tsx` — workspace shell, PDF load/upload, layout
+- `src/components/takeoff/TakeoffCanvas.tsx` — dual-canvas (pdfjs + Fabric), wheel/pan/zoom, tool handlers
+- `src/hooks/useMeasurementReducer.ts` — state shape, `SET_ACTIVE_PRESET` tool mapping
+- `src/hooks/useTakeoffSession.ts` — session load/save, group-type normalizer
+- `src/lib/takeoff/fabricHelpers.ts` — `initFabricCanvas`, `setCanvasZoom`, `panCanvas`
+- `src/lib/takeoff/pdfLoader.ts` — pdfjs-dist v5 worker setup
+- `src/lib/r2.ts` — R2 presigned URL helpers (CORS docs in header comment)
+- `app/api/takeoff/sessions/[sessionId]/pdf/route.ts` — PDF download/URL endpoint with `legacyBidFile` fallback
+- `app/api/takeoff/sessions/[sessionId]/upload/route.ts` — GET presign, POST proxy (4.5MB limit), PUT confirm
+- `app/api/legacy-bids/[id]/start-takeoff/route.ts` — seeds presets with correct `type` values now
+
 ## API Route Patterns
 - **Legacy tables**: Import from `'<relative>/db/schema-legacy'`, use `legacyBid`, `legacyCustomer`, etc. (all now in `bids` schema — queries work transparently via Drizzle)
 - **New tables**: Import from `'<relative>/db/index'` as `{ getDb, schema }`
