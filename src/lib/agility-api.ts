@@ -77,12 +77,13 @@ export interface AgilityResponse<T = Record<string, unknown>> {
 
 /**
  * Map of Beisser branch codes to Agility branch IDs.
- * Call agilityApi.fetchBranchList() once authenticated to verify/update these.
+ * Verified via BranchList call — all four branches use identity mapping.
  */
 export const BRANCH_MAP: Record<string, string> = {
+  '10FD': '10FD', // Fort Dodge
   '20GR': '20GR', // Grimes
-  '25BW': '25BW', // Booneville/Waukee
-  // Add remaining branches after running BranchList
+  '25BW': '25BW', // Waukee
+  '40CV': '40CV', // Coralville
 };
 
 // ---------------------------------------------------------------------------

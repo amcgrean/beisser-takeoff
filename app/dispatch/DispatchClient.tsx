@@ -180,6 +180,12 @@ function StopCard({
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           {statusBadge(stop.status_flag)}
+          {stop.driver_stop_status === 'delivered' && (
+            <span className="text-[9px] text-green-400 font-medium">✓ Driver confirmed</span>
+          )}
+          {stop.driver_stop_status === 'skipped' && (
+            <span className="text-[9px] text-yellow-400 font-medium">⚠ Skipped</span>
+          )}
           {stop.ar_balance != null && stop.ar_balance > 0 && (
             <span className="text-[9px] text-red-400 font-medium">
               <AlertCircle className="w-2.5 h-2.5 inline mr-0.5" />

@@ -22,6 +22,9 @@ export interface DeliveryStop {
   city: string | null;
   expect_date: string | null;
   ar_balance: number | null;
+  // Driver-app stop status (real-time, before Agility sync)
+  driver_stop_status: 'pending' | 'delivered' | 'skipped' | null;
+  driver_stop_id: number | null;
 }
 
 // GET /api/dispatch/deliveries?date=2026-04-02&branch=20GR
@@ -63,6 +66,8 @@ export async function GET(req: NextRequest) {
       address_1: string | null;
       city: string | null;
       expect_date: string | null;
+      driver_stop_status: string | null;
+      driver_stop_id: number | null;
     };
 
     const branchFilter = effectiveBranch
@@ -85,7 +90,9 @@ export async function GET(req: NextRequest) {
         soh.reference, soh.sale_type,
         soh.cust_name, soh.cust_code,
         soh.shipto_address_1 AS address_1, soh.shipto_city AS city,
-        soh.expect_date::text
+        soh.expect_date::text,
+        drs.status AS driver_stop_status,
+        drs.id     AS driver_stop_id
       FROM agility_so_header soh
       LEFT JOIN LATERAL (
         SELECT *
@@ -96,6 +103,16 @@ export async function GET(req: NextRequest) {
         ORDER BY s.shipment_num DESC
         LIMIT 1
       ) sh ON true
+      LEFT JOIN LATERAL (
+        SELECT drs2.id, drs2.status
+        FROM dispatch_route_stops drs2
+        JOIN dispatch_routes dr ON dr.id = drs2.route_id
+          AND dr.route_date = ${deliveryDate}::date
+          AND dr.branch_code = soh.system_id
+        WHERE drs2.so_id = soh.so_id::text
+        ORDER BY drs2.id DESC
+        LIMIT 1
+      ) drs ON true
       WHERE soh.is_deleted = false
         ${branchFilter}
         AND soh.so_status NOT IN ('C', 'X')
@@ -144,6 +161,8 @@ export async function GET(req: NextRequest) {
       city: r.city?.trim() || null,
       expect_date: r.expect_date,
       ar_balance: arByCode[r.cust_code?.trim() ?? ''] ?? null,
+      driver_stop_status: (r.driver_stop_status as 'pending' | 'delivered' | 'skipped' | null) ?? null,
+      driver_stop_id: r.driver_stop_id ?? null,
     }));
 
     return NextResponse.json(stops);

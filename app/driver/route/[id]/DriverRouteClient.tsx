@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronLeft, MapPin, CheckCircle2, Camera,
-  AlertCircle, RefreshCw, Truck, Package,
+  AlertCircle, RefreshCw, Truck, Package, SkipForward,
 } from 'lucide-react';
 
 interface Stop {
@@ -53,6 +53,7 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
   const [stops, setStops] = useState<Stop[]>([]);
   const [loading, setLoading] = useState(true);
   const [delivering, setDelivering] = useState<number | null>(null); // stopId being marked
+  const [skipping, setSkipping] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -71,8 +72,9 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  async function markDelivered(stop: Stop) {
-    setDelivering(stop.id);
+  async function updateStopStatus(stop: Stop, status: 'delivered' | 'skipped') {
+    if (status === 'delivered') setDelivering(stop.id);
+    else setSkipping(stop.id);
     setError('');
     try {
       const res = await fetch(`/api/dispatch/orders/${encodeURIComponent(stop.so_id)}/deliver`, {
@@ -82,22 +84,26 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
           branchCode:  route?.branch_code ?? '',
           shipmentNum: stop.shipment_num,
           stopId:      stop.id,
+          status,
           shipDate:    new Date().toISOString().slice(0, 10),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Delivery failed');
-
-      // Update local state immediately
-      setStops((prev) => prev.map((s) => s.id === stop.id ? { ...s, status: 'delivered' } : s));
-
-      if (data.agilityWarning) {
-        console.warn('[driver] Agility warning:', data.agilityWarning);
-      }
+      if (!res.ok) throw new Error(data.error ?? 'Update failed');
+      setStops((prev) => prev.map((s) => s.id === stop.id ? { ...s, status } : s));
+      if (data.agilityWarning) console.warn('[driver] Agility warning:', data.agilityWarning);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark delivered');
+      setError(err instanceof Error ? err.message : `Failed to mark ${status}`);
     }
-    setDelivering(null);
+    if (status === 'delivered') setDelivering(null);
+    else setSkipping(null);
+  }
+
+  function markDelivered(stop: Stop) { updateStopStatus(stop, 'delivered'); }
+
+  function skipStop(stop: Stop) {
+    if (!window.confirm(`Skip stop for ${stop.customer_name ?? stop.so_id}?`)) return;
+    updateStopStatus(stop, 'skipped');
   }
 
   function openPod(stop: Stop) {
@@ -109,9 +115,11 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
     router.push(`/dispatch/pod/${encodeURIComponent(stop.so_id)}?${params}`);
   }
 
-  const total = stops.length;
-  const done = stops.filter((s) => s.status === 'delivered').length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const total     = stops.length;
+  const delivered = stops.filter((s) => s.status === 'delivered').length;
+  const skippedCt = stops.filter((s) => s.status === 'skipped').length;
+  const done      = delivered + skippedCt;
+  const pct       = total > 0 ? Math.round((done / total) * 100) : 0;
 
   if (loading) {
     return (
@@ -167,6 +175,11 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
           </div>
           <div style={{ fontSize: '0.8125rem', color: '#94a3b8', flexShrink: 0 }}>
             {done}/{total}
+            {skippedCt > 0 && (
+              <span style={{ fontSize: '0.6875rem', color: '#fcd34d', marginLeft: 4 }}>
+                ({skippedCt} skipped)
+              </span>
+            )}
           </div>
         </div>
 
@@ -201,32 +214,38 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
           </div>
         ) : stops.map((stop, idx) => {
           const delivered = stop.status === 'delivered';
+          const skipped   = stop.status === 'skipped';
+          const done      = delivered || skipped;
           const isDelivering = delivering === stop.id;
+          const isSkipping   = skipping === stop.id;
+
+          const cardBg     = delivered ? '#0a1f0f' : skipped ? '#1c1407' : '#1e293b';
+          const cardBorder = delivered ? '#166534' : skipped ? '#78350f' : '#334155';
+          const numBg      = delivered ? '#166534' : skipped ? '#78350f' : '#1e3a5f';
+          const numColor   = delivered ? '#4ade80' : skipped ? '#fcd34d' : '#67e8f9';
+          const nameColor  = delivered ? '#4ade80' : skipped ? '#fcd34d' : '#e2e8f0';
 
           return (
             <div
               key={stop.id}
               style={{
-                background: delivered ? '#0a1f0f' : '#1e293b',
-                border: `1px solid ${delivered ? '#166534' : '#334155'}`,
+                background: cardBg, border: `1px solid ${cardBorder}`,
                 borderRadius: 12, padding: '14px',
-                opacity: delivered ? 0.75 : 1,
+                opacity: done ? 0.75 : 1,
               }}
             >
               {/* Stop header */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
                 <div style={{
                   width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                  background: delivered ? '#166534' : '#1e3a5f',
+                  background: numBg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 700,
-                  color: delivered ? '#4ade80' : '#67e8f9',
+                  fontSize: '0.75rem', fontWeight: 700, color: numColor,
                 }}>
-                  {delivered ? <CheckCircle2 size={16} /> : idx + 1}
+                  {delivered ? <CheckCircle2 size={16} /> : skipped ? <SkipForward size={14} /> : idx + 1}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9375rem',
-                                color: delivered ? '#4ade80' : '#e2e8f0' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: nameColor }}>
                     {stop.customer_name ?? stop.so_id}
                   </div>
                   {(stop.address_1 || stop.city) && (
@@ -246,36 +265,51 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
               </div>
 
               {/* Actions */}
-              {!delivered && (
+              {!done && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => openPod(stop)}
                     style={{
-                      flex: 1, padding: '12px 8px',
+                      flex: 1, padding: '11px 6px',
                       background: '#164e63', border: '1px solid #0e7490',
-                      borderRadius: 10, color: '#67e8f9', fontSize: '0.875rem',
+                      borderRadius: 10, color: '#67e8f9', fontSize: '0.8125rem',
                       fontWeight: 600, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                     }}
                   >
-                    <Camera size={16} />
-                    Photos &amp; Signature
+                    <Camera size={15} />
+                    Photos
                   </button>
                   <button
                     onClick={() => markDelivered(stop)}
-                    disabled={isDelivering}
+                    disabled={isDelivering || isSkipping}
                     style={{
-                      flex: 1, padding: '12px 8px',
+                      flex: 1.4, padding: '11px 6px',
                       background: isDelivering ? '#1e293b' : '#14532d',
                       border: `1px solid ${isDelivering ? '#334155' : '#166534'}`,
                       borderRadius: 10, color: isDelivering ? '#64748b' : '#4ade80',
-                      fontSize: '0.875rem', fontWeight: 600,
-                      cursor: isDelivering ? 'default' : 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      fontSize: '0.8125rem', fontWeight: 600,
+                      cursor: (isDelivering || isSkipping) ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                     }}
                   >
-                    <CheckCircle2 size={16} />
-                    {isDelivering ? 'Saving…' : 'Mark Delivered'}
+                    <CheckCircle2 size={15} />
+                    {isDelivering ? 'Saving…' : 'Delivered'}
+                  </button>
+                  <button
+                    onClick={() => skipStop(stop)}
+                    disabled={isDelivering || isSkipping}
+                    style={{
+                      padding: '11px 10px',
+                      background: isSkipping ? '#1e293b' : '#1c1407',
+                      border: `1px solid ${isSkipping ? '#334155' : '#78350f'}`,
+                      borderRadius: 10, color: isSkipping ? '#64748b' : '#fcd34d',
+                      fontSize: '0.8125rem', fontWeight: 600,
+                      cursor: (isDelivering || isSkipping) ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    }}
+                  >
+                    {isSkipping ? '…' : <SkipForward size={15} />}
                   </button>
                 </div>
               )}
@@ -295,6 +329,14 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
                   </button>
                 </div>
               )}
+
+              {skipped && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6,
+                              color: '#fcd34d', fontSize: '0.8125rem', fontWeight: 600 }}>
+                  <SkipForward size={16} />
+                  Skipped
+                </div>
+              )}
             </div>
           );
         })}
@@ -302,15 +344,16 @@ export default function DriverRouteClient({ routeId, driverName }: Props) {
         {/* All done banner */}
         {total > 0 && done === total && (
           <div style={{
-            background: '#14532d', border: '1px solid #166534',
+            background: skippedCt > 0 ? '#1c1407' : '#14532d',
+            border: `1px solid ${skippedCt > 0 ? '#78350f' : '#166534'}`,
             borderRadius: 12, padding: '20px', textAlign: 'center', marginTop: 8,
           }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>🎉</div>
-            <div style={{ fontWeight: 700, color: '#4ade80', fontSize: '1rem' }}>
-              All stops complete!
+            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>{skippedCt > 0 ? '⚠️' : '🎉'}</div>
+            <div style={{ fontWeight: 700, color: skippedCt > 0 ? '#fcd34d' : '#4ade80', fontSize: '1rem' }}>
+              Route complete{skippedCt > 0 ? ' with skips' : '!'}
             </div>
-            <div style={{ color: '#86efac', fontSize: '0.8125rem', marginTop: 4 }}>
-              Route {route.route_name} — {total} deliveries done.
+            <div style={{ color: skippedCt > 0 ? '#fde68a' : '#86efac', fontSize: '0.8125rem', marginTop: 4 }}>
+              {delivered} delivered{skippedCt > 0 ? `, ${skippedCt} skipped` : ''} — {route.route_name}
             </div>
           </div>
         )}

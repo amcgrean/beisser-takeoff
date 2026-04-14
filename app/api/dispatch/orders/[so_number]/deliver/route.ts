@@ -24,6 +24,7 @@ interface DeliverBody {
   branchCode: string;
   shipmentNum: number | string;
   stopId: number | string;
+  status?: 'delivered' | 'skipped';
   shipDate?: string;
   notes?: string;
 }
@@ -45,28 +46,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'branchCode and stopId are required' }, { status: 400 });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const stopStatus = body.status === 'skipped' ? 'skipped' : 'delivered';
   const agilityBranch = BRANCH_MAP[body.branchCode] ?? body.branchCode;
   let agilitySuccess = false;
   let agilityError = '';
 
-  // 1. Push status to Agility (non-fatal if API not configured)
-  if (isAgilityConfigured()) {
+  // 1. Push to Agility only for delivered (not skipped)
+  if (stopStatus === 'delivered' && isAgilityConfigured()) {
     try {
-      // Log exactly what we're sending to help diagnose parse errors
-      const shipPayload = {
+      await agilityApi.shipmentInfoUpdate({
         OrderID:            soNumber,
         ShipmentNumber:     Number(body.shipmentNum) || 1,
         UpdateAllPickFiles: true,
         ShipmentStatusFlag: 'Delivered' as const,
-      };
-      console.log('[deliver] ShipmentInfoUpdate payload:', JSON.stringify(shipPayload), 'branch:', agilityBranch);
-      await agilityApi.shipmentInfoUpdate(shipPayload, { branch: agilityBranch });
+      }, { branch: agilityBranch });
       agilitySuccess = true;
     } catch (err) {
       agilityError = err instanceof AgilityApiError ? err.message : String(err);
       console.error(`[deliver/${soNumber}] Agility ShipmentInfoUpdate failed:`, agilityError);
-      // Non-fatal — still mark delivered locally
+      // Non-fatal — still mark locally
     }
   }
 
@@ -75,7 +73,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     const sql = getErpSql();
     await sql`
       UPDATE dispatch_route_stops
-      SET status = 'delivered'
+      SET status = ${stopStatus},
+          notes  = COALESCE(${body.notes ?? null}, notes)
       WHERE id = ${Number(body.stopId)}
     `;
   } catch (err) {
@@ -86,6 +85,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   return NextResponse.json({
     success: true,
     soNumber,
+    status: stopStatus,
     agilitySuccess,
     ...(agilityError ? { agilityWarning: agilityError } : {}),
   });
