@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     cust_key: string | null;
     ref_num: string | null;
     open_amt: number | null;
-    open_flag: string | null;
+    open_flag: boolean | null;
     due_date: string | null;
     invoice_date: string | null;
     tran_type: string | null;
@@ -50,7 +50,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
     SELECT cust_key, ref_num, open_amt, open_flag, due_date::text, invoice_date::text, tran_type
     FROM agility_ar_open
     WHERE cust_key = ${custKey}
-      AND open_flag = 'Y'
+      AND open_flag = true
+      AND is_deleted = false
     ORDER BY due_date NULLS LAST
     LIMIT 100
   `.catch(() => [] as ArRow[]);
