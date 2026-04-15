@@ -19,8 +19,7 @@ async function requireAdmin() {
   return { session };
 }
 
-// Map app_users row → UI-facing object
-function toUserDto(r: {
+type AppUserRow = {
   id: number;
   email: string;
   display_name: string | null;
@@ -29,7 +28,10 @@ function toUserDto(r: {
   is_active: boolean;
   created_at: string | null;
   branch: string | null;
-}) {
+};
+
+// Map app_users row → UI-facing object
+function toUserDto(r: AppUserRow) {
   const roles: string[] = Array.isArray(r.roles) ? r.roles : [];
   // Derive a single-role label for the existing UI
   const role = roles.includes('admin')
@@ -75,7 +77,7 @@ export async function GET() {
 
   try {
     const sql = getErpSql();
-    const rows = await sql`
+    const rows = await sql<AppUserRow[]>`
       SELECT id, email, display_name, username, roles, is_active,
              created_at::text, branch
       FROM app_users
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const sql = getErpSql();
-    const [row] = await sql`
+    const [row] = await sql<AppUserRow[]>`
       INSERT INTO app_users (email, display_name, username, password_hash, roles, branch, is_active)
       VALUES (
         ${finalEmail},
@@ -151,7 +153,7 @@ export async function POST(req: NextRequest) {
       RETURNING id, email, display_name, username, roles, is_active,
                 created_at::text, branch
     `;
-    return NextResponse.json({ user: toUserDto(row as Parameters<typeof toUserDto>[0]) }, { status: 201 });
+    return NextResponse.json({ user: toUserDto(row) }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
     if (msg.includes('unique') || msg.includes('uq_app_users')) {

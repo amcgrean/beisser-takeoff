@@ -67,7 +67,12 @@ export async function PUT(
       .join(', ');
     const values = [userId, ...Object.values(updates)] as (string | number | boolean | null)[];
 
-    const rows = await sql.unsafe(
+    type UserRow = {
+      id: number; email: string; display_name: string | null;
+      username: string | null; roles: string[] | null; is_active: boolean;
+      created_at: string | null; branch: string | null;
+    };
+    const rows = await sql.unsafe<UserRow[]>(
       `UPDATE app_users SET ${setClauses} WHERE id = $1
        RETURNING id, email, display_name, username, roles, is_active, created_at::text, branch`,
       values
@@ -75,11 +80,7 @@ export async function PUT(
 
     if (rows.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const r = rows[0] as unknown as {
-      id: number; email: string; display_name: string | null;
-      username: string | null; roles: string[] | null; is_active: boolean;
-      created_at: string | null; branch: string | null;
-    };
+    const r = rows[0];
     const rolesArr: string[] = Array.isArray(r.roles) ? r.roles : [];
     return NextResponse.json({
       user: {
