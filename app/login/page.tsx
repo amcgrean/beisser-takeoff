@@ -109,7 +109,7 @@ export default function LoginPage() {
             <form onSubmit={handleIdentifierSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Email or username
+                  Username
                 </label>
                 <input
                   type="text"
@@ -118,7 +118,7 @@ export default function LoginPage() {
                   required
                   autoFocus
                   autoComplete="username"
-                  placeholder="username or you@beisserlumber.com"
+                  placeholder="your username"
                   className="w-full px-3 py-2.5 bg-slate-950/60 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-1 focus:ring-cyan-400 text-sm"
                 />
               </div>
@@ -145,7 +145,7 @@ export default function LoginPage() {
               </button>
 
               <p className="text-xs text-slate-500 text-center pt-1">
-                A sign-in code will be emailed to you.
+                Enter your username — a sign-in code will be emailed to you.
               </p>
             </form>
           )}
@@ -168,9 +168,8 @@ export default function LoginPage() {
                   </button>
                 </div>
                 <p className="text-xs text-slate-500 mb-3">
-                  Code sent to{' '}
-                  <span className="text-slate-300">{identifier.trim().toLowerCase()}</span>
-                  {identifier.includes('@') ? '' : "'s email"}.
+                  A code was sent to the email on file for{' '}
+                  <span className="text-slate-300">{identifier.trim().toLowerCase()}</span>.
                   Check your inbox — it expires in 10 minutes.
                 </p>
                 <input
