@@ -65,7 +65,7 @@ export async function PUT(
     const setClauses = Object.keys(updates)
       .map((k, i) => `${k} = $${i + 2}`)
       .join(', ');
-    const values = [userId, ...Object.values(updates)];
+    const values = [userId, ...Object.values(updates)] as (string | number | boolean | null)[];
 
     const rows = await sql.unsafe(
       `UPDATE app_users SET ${setClauses} WHERE id = $1
