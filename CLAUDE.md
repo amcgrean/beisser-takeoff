@@ -70,10 +70,11 @@ Both connections use `prepare: false` and `max: 1` (serverless-safe, pgBouncer-c
 - All timestamps: `withTimezone: true`
 
 ### Auth
-- NextAuth v5 beta, credentials provider, JWT strategy
-- Legacy `bids."user"` table (serial IDs). Passwords are plaintext but auto-upgrade to bcrypt on successful login. Bulk bcrypt migration planned for Phase 5.
-- `auth.ts` queries `bids."user"` via Drizzle ORM
-- Dev bypass: username `admin` / password `ChangeMe123!`
+- NextAuth v5 beta, single credentials provider, JWT strategy (7-day sessions)
+- **Fully passwordless OTP.** All users sign in with username → emailed 6-digit code.
+- `auth.ts` resolves identifier via `public.app_users`, verifies `public.otp_codes`, returns roles/branch from `app_users`
+- OTP email sent via `POST /api/auth/send-otp` (accepts username or email, looks up actual email in `app_users`)
+- Dev bypass: any username with code `000000` when no DB env vars are set
 
 ## PDF Takeoff Engine
 
@@ -391,12 +392,11 @@ Branch: `claude/debug-taokeoff-errors-NngpH` (merged to `main`)
 - `SAMSARA_VEHICLE_BRANCH_MAP` — JSON map of Samsara vehicle ID → branch code (e.g. `{"281474997057684":"25BW",...}`)
 - `SAMSARA_CACHE_TTL` — Vehicle location cache TTL in seconds (default 30; set to 15 in Vercel)
 
-### Email / OTP (set in Vercel; OTP flow not yet implemented in LiveEdge)
-- `RESEND_API_KEY` — Resend.com API key for transactional email
-- `OTP_EMAIL_FROM` — Sender address for OTP emails (e.g. `noreply@beisser.cloud`)
-- `OTP_APP_NAME` — App name shown in OTP emails (e.g. `Beisser Ops`)
-- `AUTH_REQUIRED` — Whether OTP auth is enforced (`true`/`false`); currently `false` (NextAuth handles auth)
-- `AUTH_OTP_CONSOLE` — Print OTP codes to server console instead of emailing (`true`/`false`)
+### Email / OTP
+- `RESEND_API_KEY` — **Required.** Resend.com API key for sending sign-in codes. Without this nobody can log in.
+- `OTP_EMAIL_FROM` — Sender address for OTP emails (defaults to `noreply@beisserlumber.com`)
+- `OTP_APP_NAME` — App name shown in OTP emails (defaults to `Beisser LiveEdge`)
+- `AUTH_OTP_CONSOLE` — Print OTP codes to server console instead of emailing (`true`/`false`). Use in local dev when Resend isn't configured.
 - `SESSION_COOKIE_SECURE` — Secure flag on session cookie (`true` in prod, `false` in dev)
 
 ## Navigation Structure
