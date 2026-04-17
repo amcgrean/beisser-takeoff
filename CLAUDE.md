@@ -335,6 +335,15 @@ Branch: `claude/auth-unification-FelEf` (merged to `main`)
 3. Backfilled `password_hash` in `app_users` via `UPDATE public.app_users SET password_hash = u.password FROM bids."user" u WHERE estimating_user_id = u.id` (69/70 — `po-test` is OTP-only, no estimating user)
 4. `password_hash` column is now inert — auth no longer reads it
 
+#### AR / Agility API Cleanup (2026-04-17) — COMPLETE
+Branch: `claude/review-customer-route-api-jVgJG`
+
+- Reviewed Agility live API vs mirror table usage — documented correct pattern (see Agility Live API section)
+- Removed AR balance data from all operational screens: dispatch board, stop detail panel, delivery table, sales customer list, sales customer profile, admin customer detail
+- Stripped AR sub-queries from `GET /api/dispatch/deliveries` and `GET /api/dispatch/orders/[so_number]/timeline`
+- Removed `balance`/`credit_limit` from `GET /api/sales/customers` list query
+- `/api/sales/customers/[code]/ar` and `/ar-live` routes preserved for future accounting view
+
 #### Flask Sunset — NOT STARTED
 - DNS routing, archive Flask app
 
@@ -343,7 +352,7 @@ Branch: `claude/auth-unification-FelEf` (merged to `main`)
 - **RMA Credits images**: `credit_images.filepath` holds local WH-Tracker paths — not R2 keys yet. Metadata search at `/credits` works. Image serving requires R2 pipeline (see Pending Actions)
 - **WH-Tracker kiosk/TV/smart scan**: not appropriate for LiveEdge web app pattern — intentionally deferred
 - **Purchasing workflow** (tasks, approvals, exceptions, PO notes): verify `purchasing_tasks`, `purchasing_approvals`, etc. exist in `public` schema first
-- **Dispatch enrichment** (driver/truck mgmt, AR balance, order timeline per stop): WH-Tracker has these; LiveEdge dispatch shows basic stops only
+- **Dispatch enrichment** (driver/truck mgmt, order timeline per stop): WH-Tracker had these; LiveEdge dispatch shows basic stops only. **AR balance intentionally excluded from dispatch** — see AR Data Policy in the Agility Live API section.
 - **Sales delivery board** (`/sales/tracker`, `/sales/deliveries`): WH-Tracker had sales-rep-facing delivery views not yet ported
 - **Generic file management**: WH-Tracker's `files` + `file_versions` system not ported to LiveEdge
 - **`app_users` admin UI**: `/admin/users` queries `public.app_users` but the create/edit UI was built for `bids."user"` fields. Should be updated to match `app_users` schema (roles JSON array, branch string, no password field).
@@ -442,6 +451,26 @@ Separate from the `agility_*` mirror tables — this is a direct REST client to 
 | `call()` | generic passthrough | `/api/sales/orders/[so_number]/push-to-erp` |
 
 Methods built but not yet wired to routes: `salesOrderList`, `salesOrderCreateValidate`, `shipmentsList`, `itemsList`, `customersList`, `customerBilltoBalancesList`, `dispatchGet`, `purchaseOrderCreate`.
+
+### Agility API vs Mirror Table Usage Pattern
+**Rule of thumb — confirmed 2026-04-17:**
+| Data type | Use | Reason |
+|-----------|-----|--------|
+| Stable profile data (customer detail, addresses, SO history) | Mirror tables (`agility_*`) | Fast, no external dep, denormalized |
+| Time-sensitive AR balance / open invoices | Live API (`customerOpenActivity`) | Balance changes in real-time |
+| All write-back / mutations | Live API | Must write to source of truth |
+| Real-time price & availability | Live API (`itemPriceAndAvailability`) | Inventory changes constantly |
+
+Do **not** add new read routes against the Agility live API just to avoid the mirror tables — the mirror tables are the correct read layer for stable ERP data.
+
+### AR Data Policy
+AR balance and accounting data is **intentionally excluded from all operational screens** (dispatch, picking, warehouse, sales customer list). It belongs in a dedicated accounting/credit view that has not been built yet.
+
+- `/api/sales/customers/[code]/ar` — mirror table AR detail. Preserved, not surfaced in UI.
+- `/api/sales/customers/[code]/ar-live` — live Agility AR + mirror fallback. Preserved, not surfaced in UI.
+- `customerBilltoBalancesList()` — built in `agility-api.ts`, unwired. Wire alongside `customerOpenActivity` when building the accounting view.
+
+When the accounting AR view is built, add it under a dedicated route (e.g. `/accounting` or `/admin/ar`) — do **not** re-add AR data to dispatch or picking views.
 
 ### Admin Connectivity Routes
 - `GET /api/admin/agility/status` — checks env var presence, no network call
