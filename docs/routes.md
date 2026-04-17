@@ -1,7 +1,7 @@
 # LiveEdge Route Reference
 
-**Last audited: 2026-04-17**
-**API routes: 147 | Page routes: 77**
+**Last audited: 2026-04-17 (transfers added 2026-04-17)**
+**API routes: 148 | Page routes: 78**
 
 All API routes require a valid NextAuth session (`session?.user`) unless noted as **public**.
 Branch-scoped routes respect the active branch cookie; admin users see all branches.
@@ -74,6 +74,7 @@ Branch-scoped routes respect the active branch cookie; admin users see all branc
 | `/api/dispatch/orders/[so_number]/lines` | GET | SO line items | ERP `agility_so_lines` |
 | `/api/dispatch/orders/[so_number]/pod` | GET POST | Proof-of-delivery data | Photo + signature storage |
 | `/api/dispatch/orders/[so_number]/timeline` | GET | SO event timeline | pick → ship → delivery |
+| `/api/dispatch/transfers` | GET | Inter-branch transfer SOs + POs | Returns `{ outbound: TransferSO[], inbound: TransferPO[] }`. Outbound = open SOs with `sale_type='T'` from this branch. Inbound = open POs where `supplier_code` is another Beisser branch. Branch-scoped for non-admin |
 | `/api/delivery/tracker` | GET | Today + overdue delivery statuses | K/P/S statuses, fleet GPS panel. Also used by `/sales/deliveries` and `/sales/tracker` |
 | `/api/delivery/locations` | GET | Live vehicle GPS positions | Proxies Samsara via `SAMSARA_API_TOKEN`. Returns fleet map data |
 | `/api/pod/[so]/photos` | GET POST | POD photo management | R2 upload + presigned download |
@@ -341,6 +342,7 @@ Branch-scoped routes respect the active branch cookie; admin users see all branc
 ### Dispatch & Delivery
 | Page | Route | API Used |
 |------|-------|----------|
+| Branch Transfers | `/dispatch/transfers` | `/api/dispatch/transfers` |
 | Dispatch Board | `/dispatch` | `/api/dispatch/deliveries`, `/api/dispatch/routes` |
 | Driver Management | `/dispatch/drivers` | `/api/dispatch/drivers` |
 | POD Viewer | `/dispatch/pod/[so]` | `/api/dispatch/orders/[so_number]/pod` |

@@ -47,6 +47,7 @@ Shows every page, the API routes it calls, and where each route's data comes fro
 
 | Page | API Route | Data Source | Notes |
 |------|-----------|-------------|-------|
+| `/dispatch/transfers` Branch Transfers | `/api/dispatch/transfers` | 🔵 ERP Mirror | Outbound: `agility_so_header` filtered by `sale_type='T'`. Inbound: `agility_po_header` where `supplier_code` is a Beisser branch code |
 | `/dispatch` Dispatch Board | `/api/dispatch/deliveries` | 🔵 ERP Mirror + 🟢 App DB | Delivery stops from `agility_so_header`; route/stop assignments from App DB; AR balance lookup is non-fatal |
 | | `/api/dispatch/routes` | 🟢 App DB | Route records |
 | `/dispatch/drivers` | `/api/dispatch/drivers` | 🟢 App DB | |
