@@ -3,6 +3,9 @@
 ## Project Overview
 Beisser Lumber Co. internal estimating app (Next.js 15, TypeScript, Tailwind, Drizzle ORM, Supabase Postgres, NextAuth v5). Used by sales staff/estimators at four Iowa lumberyard locations.
 
+## Route Reference
+Full API and page route inventory: **`docs/routes.md`** (last audited 2026-04-17, 147 API routes / 77 pages).
+
 ## Architecture Overview
 
 ### Single Database — Supabase (agility-api project)
