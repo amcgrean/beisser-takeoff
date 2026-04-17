@@ -52,11 +52,6 @@ export async function GET(
       invoice_date: string | null;
     };
 
-    type ArRow = {
-      total_open: string | null;
-      open_count: number;
-    };
-
     const [soRows, pickRows, shipmentRows] = await Promise.all([
       sql<SoRow[]>`
         SELECT so_id, system_id, so_status, cust_code, cust_name, reference,
@@ -88,29 +83,6 @@ export async function GET(
     }
 
     const so = soRows[0];
-
-    // AR balance lookup via cust_key
-    let arBalance: number | null = null;
-    let arOpen = 0;
-    if (so.cust_code) {
-      type CustKeyRow = { cust_key: string };
-      const custRows = await sql<CustKeyRow[]>`
-        SELECT DISTINCT cust_key FROM agility_customers
-        WHERE TRIM(cust_code) = TRIM(${so.cust_code}) AND is_deleted = false
-        LIMIT 1
-      `;
-      if (custRows.length) {
-        const arRows = await sql<ArRow[]>`
-          SELECT SUM(open_amt)::text AS total_open, COUNT(*)::int AS open_count
-          FROM agility_ar_open
-          WHERE cust_key = ${custRows[0].cust_key} AND open_flag = true AND is_deleted = false
-        `;
-        if (arRows.length) {
-          arBalance = arRows[0].total_open != null ? parseFloat(arRows[0].total_open) : null;
-          arOpen = arRows[0].open_count ?? 0;
-        }
-      }
-    }
 
     // Build timeline events
     const events: { label: string; time: string | null; detail?: string }[] = [];
@@ -162,7 +134,6 @@ export async function GET(
       picks: pickRows,
       shipments: shipmentRows,
       events,
-      ar: { balance: arBalance, open_count: arOpen },
     });
   } catch (err) {
     console.error('[dispatch/orders/timeline GET]', err);

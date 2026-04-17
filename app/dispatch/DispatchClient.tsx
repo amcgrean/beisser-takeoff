@@ -60,7 +60,7 @@ interface Props {
 }
 
 type LeftTab = 'unassigned' | 'routes' | 'all';
-type DetailTab = 'timeline' | 'lines' | 'ar';
+type DetailTab = 'timeline' | 'lines';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -193,12 +193,6 @@ function StopCard({
           )}
           {stop.driver_stop_status === 'skipped' && (
             <span className="text-[9px] text-yellow-400 font-medium">⚠ Skipped</span>
-          )}
-          {stop.ar_balance != null && stop.ar_balance > 0 && (
-            <span className="text-[9px] text-red-400 font-medium">
-              <AlertCircle className="w-2.5 h-2.5 inline mr-0.5" />
-              {fmtMoney(stop.ar_balance)}
-            </span>
           )}
         </div>
       </div>
@@ -420,9 +414,6 @@ function DetailPanel({ stop, onClose }: { stop: DeliveryStop; onClose: () => voi
       .finally(() => setLoadingLines(false));
   }, [detailTab, stop.so_id, lines]);
 
-  const arBalance = timeline?.ar?.balance ?? stop.ar_balance;
-  const arCount = timeline?.ar?.open_count ?? 0;
-
   return (
     <div className="flex flex-col h-full bg-gray-900 border-l border-gray-700 overflow-hidden">
       {/* Header */}
@@ -457,13 +448,6 @@ function DetailPanel({ stop, onClose }: { stop: DeliveryStop; onClose: () => voi
           <div><dt className="text-gray-500">Reference</dt><dd className="text-gray-200 truncate">{stop.reference ?? '—'}</dd></div>
           <div><dt className="text-gray-500">Driver</dt><dd className="text-gray-200">{stop.driver ?? '—'}</dd></div>
           <div><dt className="text-gray-500">Route</dt><dd className="text-gray-200">{stop.route_id_char ?? '—'}</dd></div>
-          <div className="col-span-2">
-            <dt className="text-gray-500">AR Balance</dt>
-            <dd className={`font-semibold ${arBalance != null && arBalance > 0 ? 'text-red-400' : 'text-green-400'}`}>
-              {arBalance != null ? fmtMoney(arBalance) : 'No open balance'}
-              {arCount > 0 && <span className="ml-1 text-xs font-normal text-gray-500">({arCount} items)</span>}
-            </dd>
-          </div>
         </dl>
       </div>
 
@@ -555,7 +539,7 @@ function DetailPanel({ stop, onClose }: { stop: DeliveryStop; onClose: () => voi
 
       {/* Tabs */}
       <div className="flex border-b border-gray-700 shrink-0">
-        {(['timeline', 'lines', 'ar'] as DetailTab[]).map((t) => (
+        {(['timeline', 'lines'] as DetailTab[]).map((t) => (
           <button
             key={t}
             onClick={() => setDetailTab(t)}
@@ -563,7 +547,7 @@ function DetailPanel({ stop, onClose }: { stop: DeliveryStop; onClose: () => voi
               detailTab === t ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            {t === 'ar' ? 'AR' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
       </div>
@@ -637,30 +621,6 @@ function DetailPanel({ stop, onClose }: { stop: DeliveryStop; onClose: () => voi
           )
         )}
 
-        {/* AR tab */}
-        {detailTab === 'ar' && (
-          <div className="space-y-4">
-            <div className={`rounded-lg border p-4 text-center ${
-              arBalance != null && arBalance > 0
-                ? 'border-red-700 bg-red-900/20'
-                : 'border-green-700 bg-green-900/20'
-            }`}>
-              <div className={`text-2xl font-bold ${arBalance != null && arBalance > 0 ? 'text-red-300' : 'text-green-300'}`}>
-                {arBalance != null ? fmtMoney(arBalance) : 'No open balance'}
-              </div>
-              <div className="text-xs text-gray-400 mt-1">Open AR Balance</div>
-              {arCount > 0 && (
-                <div className="text-xs text-gray-500 mt-1">{arCount} open item{arCount !== 1 ? 's' : ''}</div>
-              )}
-            </div>
-            {arBalance != null && arBalance > 0 && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-900/20 border border-yellow-700/50">
-                <AlertCircle className="w-4 h-4 text-yellow-400 shrink-0" />
-                <p className="text-xs text-yellow-300">Customer has outstanding balance. Confirm payment before loading.</p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1199,11 +1159,6 @@ export default function DispatchClient({ isAdmin, userBranch, userName, userRole
                               {d.driver ?? d.route_id_char ?? '—'}
                             </td>
                             {isAdmin && <td className="px-2 py-2.5 text-xs text-gray-600">{d.system_id}</td>}
-                            <td className="px-2 py-2.5 text-xs whitespace-nowrap">
-                              {d.ar_balance != null && d.ar_balance > 0
-                                ? <span className="text-red-400 font-medium">{fmtMoney(d.ar_balance)}</span>
-                                : <span className="text-gray-700">—</span>}
-                            </td>
                             <td className="px-2 py-2.5 text-xs text-gray-500 whitespace-nowrap">
                               {d.loaded_date
                                 ? `${new Date(d.loaded_date).toLocaleDateString()}${d.loaded_time ? ' ' + d.loaded_time : ''}`

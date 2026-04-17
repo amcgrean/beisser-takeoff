@@ -21,7 +21,6 @@ export interface DeliveryStop {
   address_1: string | null;
   city: string | null;
   expect_date: string | null;
-  ar_balance: number | null;
   lat: number | null;
   lon: number | null;
   // Driver-app stop status (real-time, before Agility sync)
@@ -129,27 +128,6 @@ export async function GET(req: NextRequest) {
       ORDER BY soh.system_id, sh.route_id_char NULLS LAST, soh.so_id
     `;
 
-    // AR balance — separate query so delivery board still loads if AR data is unavailable
-    type ArRow = { cust_code: string; open_amt: number };
-    let arByCode: Record<string, number> = {};
-    try {
-      const custCodes = [...new Set(rows.map((r) => r.cust_code?.trim()).filter(Boolean))] as string[];
-      if (custCodes.length > 0) {
-        const arRows = await sql<ArRow[]>`
-          SELECT TRIM(ac.cust_code) AS cust_code, SUM(ar.open_amt) AS open_amt
-          FROM agility_ar_open ar
-          JOIN agility_customers ac ON ac.cust_key = ar.cust_key AND ac.is_deleted = false
-          WHERE ar.open_flag = true
-            AND ar.is_deleted = false
-            AND TRIM(ac.cust_code) = ANY(${custCodes})
-          GROUP BY TRIM(ac.cust_code)
-        `;
-        arByCode = Object.fromEntries(arRows.map((r) => [r.cust_code, Number(r.open_amt)]));
-      }
-    } catch (arErr) {
-      console.warn('[dispatch/deliveries] AR balance fetch failed (non-fatal):', arErr);
-    }
-
     const stops: DeliveryStop[] = rows.map((r: RawRow) => ({
       so_id: r.so_id,
       shipment_num: r.shipment_num,
@@ -169,7 +147,6 @@ export async function GET(req: NextRequest) {
       address_1: r.address_1?.trim() || null,
       city: r.city?.trim() || null,
       expect_date: r.expect_date,
-      ar_balance: arByCode[r.cust_code?.trim() ?? ''] ?? null,
       lat: r.lat != null ? parseFloat(r.lat) : null,
       lon: r.lon != null ? parseFloat(r.lon) : null,
       driver_stop_status: (r.driver_stop_status as 'pending' | 'delivered' | 'skipped' | null) ?? null,

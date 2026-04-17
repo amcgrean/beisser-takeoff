@@ -11,8 +11,6 @@ type Customer = {
   branch_code: string | null;
   phone: string | null;
   email: string | null;
-  balance: number | null;
-  credit_limit: number | null;
 };
 
 const BRANCHES = ['', '10FD', '20GR', '25BW', '40CV'];
@@ -108,7 +106,6 @@ export default function CustomersClient() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Branch</th>
                 <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3 text-right">Balance</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -119,9 +116,6 @@ export default function CustomersClient() {
                   <td className="px-4 py-3 text-white font-medium">{c.cust_name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-400">{c.branch_code ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-400">{c.phone ?? '—'}</td>
-                  <td className="px-4 py-3 text-right text-gray-300">
-                    {c.balance != null ? `$${c.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                  </td>
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/sales/customers/${encodeURIComponent(c.cust_code)}`}

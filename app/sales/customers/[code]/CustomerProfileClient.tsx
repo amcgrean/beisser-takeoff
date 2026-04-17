@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Phone, Mail, MapPin, DollarSign, Send, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, MapPin, Send } from 'lucide-react';
 import { usePageTracking } from '@/hooks/usePageTracking';
 
 type Customer = {
   cust_key: string; cust_code: string; cust_name: string | null;
   phone: string | null; email: string | null;
-  balance: number | null; credit_limit: number | null; terms: string | null; branch_code: string | null;
+  terms: string | null; branch_code: string | null;
 };
 
 type Order = {
@@ -25,25 +25,7 @@ type Note = {
   id: number; note_type: string | null; body: string; rep_name: string | null; created_at: string | null;
 };
 
-type ArItem = {
-  id: number;
-  ref_num: string;
-  ref_num_seq: number | null;
-  ref_type: string | null;
-  ref_date: string | null;
-  amount: string | null;
-  open_amt: string | null;
-  open_flag: boolean;
-  paid_in_full_date: string | null;
-};
-
-type ArSummary = {
-  total_open: number;
-  count: number;
-  oldest_days: number | null;
-};
-
-type Tab = 'overview' | 'orders' | 'notes' | 'ar';
+type Tab = 'overview' | 'orders' | 'notes';
 
 const SO_STATUS: Record<string, { label: string; color: string }> = {
   O: { label: 'Open',      color: 'text-blue-400' },
@@ -63,11 +45,8 @@ export default function CustomerProfileClient({ code, userName }: { code: string
   const [orders, setOrders] = useState<Order[]>([]);
   const [shiptos, setShiptos] = useState<ShipTo[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [ar, setAr] = useState<ArItem[]>([]);
-  const [arSummary, setArSummary] = useState<ArSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [notesLoading, setNotesLoading] = useState(false);
-  const [arLoading, setArLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Note form
@@ -100,22 +79,9 @@ export default function CustomerProfileClient({ code, userName }: { code: string
       .finally(() => setNotesLoading(false));
   }, [code]);
 
-  const loadAr = useCallback(() => {
-    setArLoading(true);
-    fetch(`/api/sales/customers/${encodeURIComponent(code)}/ar`)
-      .then((r) => r.json())
-      .then((d: { ar: ArItem[]; summary: ArSummary }) => {
-        setAr(d.ar);
-        setArSummary(d.summary);
-      })
-      .catch(() => {})
-      .finally(() => setArLoading(false));
-  }, [code]);
-
   useEffect(() => {
     if (tab === 'notes') loadNotes();
-    if (tab === 'ar') loadAr();
-  }, [tab, loadNotes, loadAr]);
+  }, [tab, loadNotes]);
 
   async function submitNote() {
     if (!noteBody.trim()) return;
@@ -176,35 +142,24 @@ export default function CustomerProfileClient({ code, userName }: { code: string
             <div className="text-xl font-bold text-white">{openOrders.length}</div>
             <div className="text-gray-500 text-xs">Open Orders</div>
           </div>
-          {customer.balance != null && (
-            <div className="text-center">
-              <div className="text-xl font-bold text-white">
-                ${Math.abs(customer.balance).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-              </div>
-              <div className="text-gray-500 text-xs">Balance</div>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-800 mb-6">
-        {(['overview', 'orders', 'notes', 'ar'] as Tab[]).map((t) => {
-          const label = t === 'ar' ? 'AR Balance' : t;
-          const badge = t === 'orders' ? ` (${orders.length})` : t === 'ar' && arSummary ? ` (${arSummary.count})` : '';
-          const hasAlert = t === 'ar' && arSummary && arSummary.total_open > 0;
+        {(['overview', 'orders', 'notes'] as Tab[]).map((t) => {
+          const badge = t === 'orders' ? ` (${orders.length})` : '';
           return (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium capitalize transition flex items-center gap-1.5 ${
+              className={`px-4 py-2 text-sm font-medium capitalize transition ${
                 tab === t
                   ? 'text-cyan-400 border-b-2 border-cyan-400'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              {hasAlert && <AlertCircle className="w-3.5 h-3.5 text-yellow-400" />}
-              {label}{badge}
+              {t}{badge}
             </button>
           );
         })}
@@ -233,31 +188,14 @@ export default function CustomerProfileClient({ code, userName }: { code: string
             )}
           </div>
 
-          {/* Account */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Account</h3>
-            <div className="flex items-center gap-3 text-sm">
-              <DollarSign className="w-4 h-4 text-gray-500 shrink-0" />
-              <div>
-                <span className="text-gray-400">Balance: </span>
-                <span className="text-white font-medium">
-                  {customer.balance != null
-                    ? `$${customer.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                    : '—'}
-                </span>
-              </div>
-            </div>
-            {customer.credit_limit != null && (
-              <div className="text-sm text-gray-400">
-                Credit Limit: <span className="text-white">${customer.credit_limit.toLocaleString()}</span>
-              </div>
-            )}
-            {customer.terms && (
+          {customer.terms && (
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</h3>
               <div className="text-sm text-gray-400">
                 Terms: <span className="text-white">{customer.terms}</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Ship-to addresses */}
           {shiptos.length > 0 && (
@@ -414,107 +352,6 @@ export default function CustomerProfileClient({ code, userName }: { code: string
         </div>
       )}
 
-      {/* AR Balance tab */}
-      {tab === 'ar' && (
-        <div className="space-y-6">
-          {arLoading && <p className="text-gray-500 text-sm">Loading AR data...</p>}
-
-          {!arLoading && arSummary && (
-            <>
-              {/* Summary tiles */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-center">
-                  <div className={`text-2xl font-bold ${arSummary.total_open > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
-                    ${arSummary.total_open.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">Total Open</div>
-                </div>
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold text-white">{arSummary.count}</div>
-                  <div className="text-xs text-gray-500 mt-1">Open Items</div>
-                </div>
-                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 text-center">
-                  <div className={`text-2xl font-bold ${
-                    arSummary.oldest_days != null && arSummary.oldest_days > 90
-                      ? 'text-red-400'
-                      : arSummary.oldest_days != null && arSummary.oldest_days > 30
-                      ? 'text-yellow-400'
-                      : 'text-white'
-                  }`}>
-                    {arSummary.oldest_days != null ? `${arSummary.oldest_days}d` : '—'}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">Oldest Item</div>
-                </div>
-              </div>
-
-              {/* AR line items */}
-              {ar.length === 0 ? (
-                <div className="flex items-center gap-2 text-green-400 text-sm">
-                  <CheckCircle className="w-4 h-4" />
-                  No open AR items. Account is current.
-                </div>
-              ) : (
-                <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-800 text-left text-xs text-gray-500 uppercase tracking-wider">
-                        <th className="px-4 py-3">Ref #</th>
-                        <th className="px-4 py-3">Type</th>
-                        <th className="px-4 py-3">Date</th>
-                        <th className="px-4 py-3 text-right">Invoice Amt</th>
-                        <th className="px-4 py-3 text-right">Open Amt</th>
-                        <th className="px-4 py-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ar.map((item) => {
-                        const age = item.ref_date
-                          ? Math.floor((Date.now() - new Date(item.ref_date).getTime()) / (1000 * 60 * 60 * 24))
-                          : null;
-                        const ageColor = age != null && age > 90
-                          ? 'text-red-400'
-                          : age != null && age > 30
-                          ? 'text-yellow-400'
-                          : 'text-gray-400';
-                        return (
-                          <tr
-                            key={item.id}
-                            className={`border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors ${!item.open_flag ? 'opacity-50' : ''}`}
-                          >
-                            <td className="px-4 py-3 font-mono text-cyan-300 text-xs">
-                              {item.ref_num}{item.ref_num_seq ? `-${item.ref_num_seq}` : ''}
-                            </td>
-                            <td className="px-4 py-3 text-gray-400 text-xs uppercase">{item.ref_type ?? '—'}</td>
-                            <td className={`px-4 py-3 text-xs ${ageColor}`}>
-                              {item.ref_date ? new Date(item.ref_date).toLocaleDateString() : '—'}
-                              {age != null && item.open_flag && (
-                                <span className="ml-1 text-gray-600">({age}d)</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right text-gray-300 font-mono text-xs">
-                              ${parseFloat(item.amount ?? '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className={`px-4 py-3 text-right font-mono text-xs font-medium ${item.open_flag ? 'text-yellow-300' : 'text-gray-500'}`}>
-                              ${parseFloat(item.open_amt ?? '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {item.open_flag ? (
-                                <span className="text-xs bg-yellow-900/40 border border-yellow-700/50 text-yellow-300 rounded px-2 py-0.5">Open</span>
-                              ) : (
-                                <span className="text-xs bg-gray-800 border border-gray-700 text-gray-500 rounded px-2 py-0.5">Paid</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 }
