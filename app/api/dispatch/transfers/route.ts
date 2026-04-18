@@ -5,9 +5,9 @@ import { getErpSql } from '../../../../db/supabase';
 // Beisser branch codes — used to identify inbound POs sourced from another branch.
 const BRANCH_CODES = ['10FD', '20GR', '25BW', '40CV'];
 
-// Sale type code used by Agility for inter-branch transfer SOs.
-// Confirmed against agility_so_header.sale_type values. Change here if ERP config differs.
-const TRANSFER_SALE_TYPE = 'T';
+// Sale type used by Agility for inter-branch transfer SOs.
+const TRANSFER_SALE_TYPE = 'TRANSFER';
+
 
 export interface TransferSO {
   so_id: string;
