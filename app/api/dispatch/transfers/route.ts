@@ -5,6 +5,9 @@ import { getErpSql } from '../../../../db/supabase';
 // Beisser branch codes — used to identify inbound POs sourced from another branch.
 const BRANCH_CODES = ['10FD', '20GR', '25BW', '40CV'];
 
+// Sale type used by Agility for inter-branch transfer SOs.
+const TRANSFER_SALE_TYPE = 'TRANSFER';
+
 
 export interface TransferSO {
   so_id: string;
@@ -96,7 +99,7 @@ export async function GET(req: NextRequest) {
           AND sol.is_deleted = false
       ) lc ON true
       WHERE soh.is_deleted = false
-        AND UPPER(TRIM(COALESCE(soh.cust_code, ''))) = ANY(${BRANCH_CODES})
+        AND UPPER(COALESCE(soh.sale_type, '')) = ${TRANSFER_SALE_TYPE}
         AND soh.so_status NOT IN ('C', 'X')
         ${branchFilter}
       ORDER BY soh.expect_date ASC NULLS LAST, soh.so_id
