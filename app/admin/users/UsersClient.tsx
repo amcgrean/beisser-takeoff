@@ -178,7 +178,7 @@ export default function UsersClient() {
                     <td className="text-slate-400 text-sm font-mono">
                       {u.agentId || <span className="text-slate-600 italic">—</span>}
                     </td>
-                    <td className="text-slate-400 text-sm max-w-[180px] truncate">{u.email || <span className="text-slate-600 italic">—</span>}</td>
+                    <td className="text-slate-400 text-sm">{u.email || <span className="text-slate-600 italic">—</span>}</td>
                     <td>
                       <span className={`flex items-center gap-1.5 w-fit px-2 py-0.5 rounded text-[11px] font-medium capitalize ${
                         u.role === 'admin'          ? 'bg-purple-900/40 text-purple-400 border border-purple-700' :
