@@ -145,7 +145,7 @@ export async function GET() {
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
         AND so_status NOT IN ('S', 'I', 'C')
         ${branch ? sql`AND system_id = ${branch}` : sql``}
     `,
@@ -153,7 +153,7 @@ export async function GET() {
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
         AND so_status NOT IN ('S', 'I', 'C')
         AND UPPER(TRIM(rep_3)) = ${rep}
         ${branch ? sql`AND system_id = ${branch}` : sql``}
@@ -162,7 +162,7 @@ export async function GET() {
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
         AND so_status NOT IN ('S', 'I', 'C')
         AND UPPER(TRIM(rep_1)) = ${rep}
         ${branch ? sql`AND system_id = ${branch}` : sql``}
