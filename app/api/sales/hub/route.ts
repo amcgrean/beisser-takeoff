@@ -49,7 +49,7 @@ export interface HubData {
   recentActivity: HubActivity[];
   recentTransactions: HubTransaction[];
   username: string;
-  _debug?: { repUsed: string; agentIdInDb: string | null; branchReps: string[] };
+  _debug?: { repUsed: string; agentIdInDb: string | null; branchReps: string[]; saleTypes: string[] };
 }
 
 function relativeTime(ts: string): string {
@@ -88,15 +88,27 @@ export async function GET() {
   if (!rep) return NextResponse.json(EMPTY);
   const username = userRows[0]?.username ?? '';
 
-  // Debug: show sample of actual rep_1 values in this branch so mismatches are visible
-  const sampleRepsRes = await sql<{ rep: string }[]>`
-    SELECT DISTINCT UPPER(TRIM(rep_1)) AS rep
-    FROM public.agility_so_header
-    WHERE is_deleted = false
-      AND rep_1 IS NOT NULL AND TRIM(rep_1) <> ''
-      ${branch ? sql`AND system_id = ${branch}` : sql``}
-    ORDER BY rep LIMIT 30
-  `;
+  const [sampleRepsRes, saleTypesRes] = await Promise.all([
+    // Debug: show sample of actual rep_1 values in this branch
+    sql<{ rep: string }[]>`
+      SELECT DISTINCT UPPER(TRIM(rep_1)) AS rep
+      FROM public.agility_so_header
+      WHERE is_deleted = false
+        AND rep_1 IS NOT NULL AND TRIM(rep_1) <> ''
+        ${branch ? sql`AND system_id = ${branch}` : sql``}
+      ORDER BY rep LIMIT 30
+    `,
+    // Debug: show what sale_type values exist so WC format can be confirmed
+    sql<{ sale_type: string; cnt: string }[]>`
+      SELECT UPPER(TRIM(COALESCE(sale_type, ''))) AS sale_type, COUNT(*)::text AS cnt
+      FROM public.agility_so_header
+      WHERE is_deleted = false
+        ${branch ? sql`AND system_id = ${branch}` : sql``}
+      GROUP BY UPPER(TRIM(COALESCE(sale_type, '')))
+      ORDER BY COUNT(*) DESC
+      LIMIT 20
+    `,
+  ]);
 
   type TopCustRow = { cust_code: string; cust_name: string | null; order_count: string };
   type BidActRow  = { bid_id: number; action: string; project_name: string; customer_name: string; ts: string };
@@ -129,20 +141,20 @@ export async function GET() {
         AND created_date >= CURRENT_DATE - INTERVAL '30 days'
         ${branch ? sql`AND system_id = ${branch}` : sql``}
     `,
-    // Branch will calls open
+    // Branch will calls open (not yet staged/invoiced/closed)
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
-        AND so_status NOT IN ('I', 'C')
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
+        AND so_status NOT IN ('S', 'I', 'C')
         ${branch ? sql`AND system_id = ${branch}` : sql``}
     `,
     // Will calls I wrote — rep_3 (who entered the order)
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
-        AND so_status NOT IN ('I', 'C')
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
+        AND so_status NOT IN ('S', 'I', 'C')
         AND UPPER(TRIM(rep_3)) = ${rep}
         ${branch ? sql`AND system_id = ${branch}` : sql``}
     `,
@@ -150,8 +162,8 @@ export async function GET() {
     sql<Count[]>`
       SELECT COUNT(*)::text AS cnt FROM public.agility_so_header
       WHERE is_deleted = false
-        AND UPPER(TRIM(sale_type)) = 'WC'
-        AND so_status NOT IN ('I', 'C')
+        AND UPPER(TRIM(sale_type)) = 'WILLCALL'
+        AND so_status NOT IN ('S', 'I', 'C')
         AND UPPER(TRIM(rep_1)) = ${rep}
         ${branch ? sql`AND system_id = ${branch}` : sql``}
     `,
@@ -280,6 +292,11 @@ export async function GET() {
     recentTransactions: recentTxRes,
     username,
     // Temporary debug — remove once agent_id matching is confirmed
-    _debug: { repUsed: rep, agentIdInDb: userRows[0]?.agent_id ?? null, branchReps: sampleRepsRes.map((r: { rep: string }) => r.rep) },
+    _debug: {
+      repUsed: rep,
+      agentIdInDb: userRows[0]?.agent_id ?? null,
+      branchReps: sampleRepsRes.map((r: { rep: string }) => r.rep),
+      saleTypes: saleTypesRes.map((r: { sale_type: string; cnt: string }) => `${r.sale_type || '(blank)'}:${r.cnt}`),
+    },
   } satisfies HubData);
 }
