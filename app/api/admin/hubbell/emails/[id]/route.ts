@@ -3,6 +3,7 @@ import { auth } from '../../../../../../auth';
 import { getDb } from '../../../../../../db/index';
 import { hubbellEmails, hubbellEmailCandidates } from '../../../../../../db/schema';
 import { eq } from 'drizzle-orm';
+import { upsertAddressCache } from '@/lib/hubbell/address-cache';
 
 type Params = Promise<{ id: string }>;
 
@@ -46,14 +47,20 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   };
 
   const db = getDb();
-  const [existing] = await db.select({ id: hubbellEmails.id }).from(hubbellEmails).where(eq(hubbellEmails.id, id));
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // Fetch full email row so we have extractedAddress for cache upsert
+  const [emailRow] = await db
+    .select()
+    .from(hubbellEmails)
+    .where(eq(hubbellEmails.id, id));
+  if (!emailRow) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const userId = (session.user as { id?: string }).id ?? session.user.email ?? 'unknown';
   const now = new Date();
 
   if (body.action === 'confirm') {
     if (!body.soId) return NextResponse.json({ error: 'soId required' }, { status: 400 });
+
     await db.update(hubbellEmails)
       .set({
         matchStatus:       'confirmed',
@@ -66,6 +73,30 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
         updatedAt:    now,
       })
       .where(eq(hubbellEmails.id, id));
+
+    // Upsert learned address cache so future emails auto-confirm
+    if (emailRow.extractedAddress) {
+      // Look up shipto fields from the matched candidate if available
+      const [candidate] = await db
+        .select()
+        .from(hubbellEmailCandidates)
+        .where(eq(hubbellEmailCandidates.emailId, id))
+        .orderBy(hubbellEmailCandidates.rank)
+        .limit(1);
+
+      const shiptoCandidate = candidate?.soId === body.soId ? candidate : null;
+
+      await upsertAddressCache({
+        address:      emailRow.extractedAddress,
+        soId:         body.soId,
+        custCode:     body.custCode ?? null,
+        custName:     body.custName ?? null,
+        shiptoAddress: shiptoCandidate?.shiptoAddress ?? null,
+        shiptoCity:    shiptoCandidate?.shiptoCity    ?? null,
+        shiptoState:   shiptoCandidate?.shiptoState   ?? null,
+        shiptoZip:     shiptoCandidate?.shiptoZip     ?? null,
+      }).catch((err) => console.error('[hubbell/confirm] address cache upsert failed', err));
+    }
 
   } else if (body.action === 'reject') {
     await db.update(hubbellEmails)
@@ -81,13 +112,13 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
   } else if (body.action === 'reset') {
     await db.update(hubbellEmails)
       .set({
-        matchStatus:   'pending',
-        confirmedSoId: null,
+        matchStatus:       'pending',
+        confirmedSoId:     null,
         confirmedCustCode: null,
         confirmedCustName: null,
-        confirmedBy:   null,
-        confirmedAt:   null,
-        updatedAt:     now,
+        confirmedBy:       null,
+        confirmedAt:       null,
+        updatedAt:         now,
       })
       .where(eq(hubbellEmails.id, id));
 

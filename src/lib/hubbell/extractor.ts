@@ -1,4 +1,4 @@
-// Extracts PO/WO numbers, addresses, amounts, and descriptions from email text.
+// Extracts PO/WO numbers, addresses, amounts, dates, and descriptions from email text.
 
 export interface ExtractedEmailData {
   emailType: 'po' | 'wo' | 'other';
@@ -9,6 +9,11 @@ export interface ExtractedEmailData {
   state: string | null;
   zip: string | null;
   amount: number | null;
+  taxAmount: number | null;
+  shippingAmount: number | null;
+  needByDate: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
   description: string | null;
 }
 
@@ -183,13 +188,21 @@ function parseCityStateZip(line: string): { city: string; state: string | null; 
 }
 
 function extractAmount(subject: string, body: string): number | null {
-  const combined = `${subject}\n${body.slice(0, 3000)}`;
-  // Look for labeled amounts first: Total, Amount, Contract Amount, etc.
+  const combined = `${subject}\n${body.slice(0, 5000)}`;
+  // Labeled order/contract totals — skip tax and shipping
   const labeled = combined.match(
-    /(?:total|amount|contract\s+amount|bid\s+amount|invoice\s+amount|subtotal|grand\s+total)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i
+    /(?:order\s+total|grand\s+total|contract\s+amount|bid\s+amount|subtotal|invoice\s+(?:total|amount)|total\s+amount|amount\s+due)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i
   );
   if (labeled) {
     const v = parseFloat(labeled[1].replace(/,/g, ''));
+    if (!isNaN(v) && v > 0) return v;
+  }
+  // Generic total / amount label
+  const generic = combined.match(
+    /(?:total|amount)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i
+  );
+  if (generic) {
+    const v = parseFloat(generic[1].replace(/,/g, ''));
     if (!isNaN(v) && v > 0) return v;
   }
   // Fallback: largest dollar amount in the text
@@ -198,6 +211,72 @@ function extractAmount(subject: string, body: string): number | null {
     .filter((v) => !isNaN(v) && v > 0);
   if (allAmounts.length > 0) return Math.max(...allAmounts);
   return null;
+}
+
+function extractTaxAmount(body: string): number | null {
+  const m = body.slice(0, 5000).match(
+    /(?:tax|sales\s+tax|tax\s+amount)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i
+  );
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(/,/g, ''));
+  return !isNaN(v) && v > 0 ? v : null;
+}
+
+function extractShippingAmount(body: string): number | null {
+  const m = body.slice(0, 5000).match(
+    /(?:shipping|freight|delivery\s+charge|handling)\s*:?\s*\$?\s*([\d,]+(?:\.\d{2})?)/i
+  );
+  if (!m) return null;
+  const v = parseFloat(m[1].replace(/,/g, ''));
+  return !isNaN(v) && v > 0 ? v : null;
+}
+
+// Parse a variety of date formats into ISO date string (YYYY-MM-DD)
+function parseDate(raw: string): string | null {
+  // Try MM/DD/YYYY, MM-DD-YYYY
+  const mdy = raw.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (mdy) {
+    const year = mdy[3].length === 2 ? '20' + mdy[3] : mdy[3];
+    const month = mdy[1].padStart(2, '0');
+    const day   = mdy[2].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  // Try "January 15, 2026" or "Jan 15 2026"
+  const months: Record<string, string> = {
+    jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+    jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
+  };
+  const named = raw.match(/([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})/);
+  if (named) {
+    const mo = months[named[1].toLowerCase().slice(0, 3)];
+    if (mo) return `${named[3]}-${mo}-${named[2].padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function extractNeedByDate(subject: string, body: string): string | null {
+  const combined = `${subject}\n${body.slice(0, 3000)}`;
+  const m = combined.match(
+    /(?:need(?:ed)?\s+by|required\s+by|required\s+date|due\s+date|deliver\s+by|delivery\s+date|ship\s+by|expected\s+date|request(?:ed)?\s+date|want\s+date)\s*:?\s*([^\n,]{5,30})/i
+  );
+  if (!m) return null;
+  return parseDate(m[1].trim());
+}
+
+function extractContactName(body: string): string | null {
+  return firstMatch([
+    /(?:contact|ordered\s+by|requested\s+by|attention|attn)\s*:?\s*([A-Za-z][A-Za-z\s\-\.]{2,40}?)(?:\n|,|\s{2}|$)/i,
+  ], body.slice(0, 3000));
+}
+
+function extractContactPhone(body: string): string | null {
+  const m = body.slice(0, 3000).match(
+    /(?:phone|cell|mobile|tel|call)\s*:?\s*([\d\s\(\)\-\.+]{7,20})/i
+  );
+  if (m) return m[1].trim().replace(/\s+/g, ' ');
+  // Standalone phone number pattern
+  const standalone = body.slice(0, 3000).match(/\b(\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4})\b/);
+  return standalone ? standalone[1] : null;
 }
 
 function extractDescription(subject: string, body: string): string | null {
@@ -232,6 +311,11 @@ export function extractEmailData(subject: string, bodyText: string | null): Extr
   const poNumber  = extractPoNumber(subject, body);
   const woNumber  = extractWoNumber(subject, body);
   const amount    = extractAmount(subject, body);
+  const taxAmount     = extractTaxAmount(body);
+  const shippingAmount = extractShippingAmount(body);
+  const needByDate = extractNeedByDate(subject, body);
+  const contactName  = extractContactName(body);
+  const contactPhone = extractContactPhone(body);
   const desc      = extractDescription(subject, body);
 
   // Try structured WO subject format first ("New WO<n>-Customer-Address")
@@ -243,5 +327,11 @@ export function extractEmailData(subject: string, bodyText: string | null): Extr
   const state   = woSubject?.state   ?? bodyAddr.state;
   const zip     = woSubject?.zip     ?? bodyAddr.zip;
 
-  return { emailType, poNumber, woNumber, address, city, state, zip, amount, description: desc };
+  return {
+    emailType, poNumber, woNumber,
+    address, city, state, zip,
+    amount, taxAmount, shippingAmount,
+    needByDate, contactName, contactPhone,
+    description: desc,
+  };
 }

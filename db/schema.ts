@@ -420,8 +420,13 @@ export const hubbellEmails = bidsSchema.table(
     extractedCity:        varchar('extracted_city', { length: 100 }),
     extractedState:       varchar('extracted_state', { length: 50 }),
     extractedZip:         varchar('extracted_zip', { length: 20 }),
-    extractedAmount:      numeric('extracted_amount', { precision: 12, scale: 2 }),
-    extractedDescription: text('extracted_description'),
+    extractedAmount:       numeric('extracted_amount', { precision: 12, scale: 2 }),
+    extractedTaxAmount:    numeric('extracted_tax_amount', { precision: 12, scale: 2 }),
+    extractedShipping:     numeric('extracted_shipping', { precision: 12, scale: 2 }),
+    extractedNeedByDate:   varchar('extracted_need_by_date', { length: 20 }),
+    extractedContactName:  varchar('extracted_contact_name', { length: 255 }),
+    extractedContactPhone: varchar('extracted_contact_phone', { length: 50 }),
+    extractedDescription:  text('extracted_description'),
     // 'pending' | 'matched' | 'unmatched' | 'confirmed' | 'rejected'
     matchStatus:       varchar('match_status', { length: 20 }).notNull().default('pending'),
     confirmedSoId:     varchar('confirmed_so_id', { length: 50 }),
@@ -463,6 +468,30 @@ export const hubbellEmailCandidates = bidsSchema.table(
   (table) => [
     index('hubbell_candidates_email_id_idx').on(table.emailId),
     index('hubbell_candidates_so_id_idx').on(table.soId),
+  ]
+);
+
+export const hubbellAddressCache = bidsSchema.table(
+  'hubbell_address_cache',
+  {
+    id:              uuid('id').primaryKey().defaultRandom(),
+    addressKey:      varchar('address_key', { length: 200 }).notNull().unique(),
+    addressRaw:      varchar('address_raw', { length: 255 }),
+    soId:            varchar('so_id', { length: 50 }).notNull(),
+    systemId:        varchar('system_id', { length: 20 }),
+    custCode:        varchar('cust_code', { length: 50 }),
+    custName:        varchar('cust_name', { length: 255 }),
+    shiptoAddress:   varchar('shipto_address', { length: 255 }),
+    shiptoCity:      varchar('shipto_city', { length: 100 }),
+    shiptoState:     varchar('shipto_state', { length: 50 }),
+    shiptoZip:       varchar('shipto_zip', { length: 20 }),
+    confirmedCount:  integer('confirmed_count').notNull().default(1),
+    lastConfirmedAt: timestamp('last_confirmed_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:       timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('hubbell_address_cache_so_id_idx').on(table.soId),
   ]
 );
 
