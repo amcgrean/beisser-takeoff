@@ -34,7 +34,7 @@ const STATUS_OPTIONS = [
 const SALE_TYPE_OPTIONS = [
   { value: '',   label: 'All Types' },
   { value: 'SO', label: 'Sales Order' },
-  { value: 'WC', label: 'Will Call' },
+  { value: 'Willcall', label: 'Will Call' },
   { value: 'T',  label: 'Transfer' },
   { value: 'Q',  label: 'Quote' },
 ];
@@ -191,9 +191,9 @@ export default function TransactionsClient({ isAdmin, userBranch, agentId }: Pro
   // Quick shortcuts for "my" views (only shown when agentId known)
   const shortcuts = agentId ? [
     { label: 'My Open',         params: { rep1: agentId, status: 'O', saleType: '', rep3: '' } },
-    { label: 'My Will Calls',   params: { rep1: agentId, status: 'O', saleType: 'WC', rep3: '' } },
+    { label: 'My Will Calls',   params: { rep1: agentId, status: 'O', saleType: 'Willcall', rep3: '' } },
     { label: 'I Wrote',         params: { rep3: agentId, status: 'O', saleType: '', rep1: '' } },
-    { label: 'WC I Wrote',      params: { rep3: agentId, status: 'O', saleType: 'WC', rep1: '' } },
+    { label: 'WC I Wrote',      params: { rep3: agentId, status: 'O', saleType: 'Willcall', rep1: '' } },
   ] : [];
 
   return (
