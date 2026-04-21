@@ -4,6 +4,7 @@ import { getDb } from '../../../../db/index';
 import { hubbellEmails, hubbellEmailCandidates } from '../../../../db/schema';
 import { extractEmailData } from '@/lib/hubbell/extractor';
 import { matchAddress } from '@/lib/hubbell/address-matcher';
+import { checkAddressCache } from '@/lib/hubbell/address-cache';
 
 // POST /api/inbound/hubbell
 // Resend inbound webhook — fires on email.received for hubbell@beisser.cloud
@@ -28,6 +29,22 @@ function parseFrom(from: string): { email: string; name: string | null } {
   const m = from.match(/^(.+?)\s*<([^>]+)>$/);
   if (m) return { name: m[1].trim() || null, email: m[2].trim() };
   return { name: null, email: from.trim() };
+}
+
+// Strip HTML tags for plain-text fallback
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|li|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 export async function POST(req: NextRequest) {
@@ -56,34 +73,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
-  const { from, subject, text, messageId } = payload.data;
+  const { from, subject, text, html, messageId } = payload.data;
   const receivedAt = payload.created_at ? new Date(payload.created_at) : new Date();
   const { email: fromEmail, name: fromName } = parseFrom(from);
   const subjectText = subject ?? '(no subject)';
 
+  // Prefer plain text; fall back to stripped HTML if text body is absent
+  const bodyText = text ?? (html ? stripHtml(html) : '');
+
   // Extract structured data from email content
-  const extracted = extractEmailData(subjectText, text ?? '');
+  const extracted = extractEmailData(subjectText, bodyText);
 
-  // Run address matching
-  let candidates = await matchAddress({
-    address: extracted.address,
-    city:    extracted.city,
-    state:   extracted.state,
-    zip:     extracted.zip,
-  }).catch((err) => {
-    console.error('[inbound/hubbell] Address match failed', err);
-    return [];
-  });
+  let matchStatus: string;
+  let confirmedSoId:     string | null = null;
+  let confirmedCustCode: string | null = null;
+  let confirmedCustName: string | null = null;
+  let topConfidence:     number | null = null;
+  let candidates: Awaited<ReturnType<typeof matchAddress>> = [];
 
-  // Determine auto-match status
-  const topCandidate = candidates[0] ?? null;
-  const autoConfident = topCandidate !== null && topCandidate.confidence >= 85 && (
-    candidates.length === 1 || topCandidate.confidence - (candidates[1]?.confidence ?? 0) >= 20
-  );
+  // Check learned address cache first
+  const cacheHit = extracted.address
+    ? await checkAddressCache(extracted.address).catch(() => null)
+    : null;
 
-  const matchStatus = topCandidate === null ? 'unmatched'
-    : autoConfident ? 'matched'
-    : 'pending';
+  if (cacheHit) {
+    matchStatus       = 'confirmed';
+    confirmedSoId     = cacheHit.soId;
+    confirmedCustCode = cacheHit.custCode;
+    confirmedCustName = cacheHit.custName;
+    topConfidence     = 95;
+  } else {
+    // Run address matching against agility_so_header
+    candidates = await matchAddress({
+      address: extracted.address,
+      city:    extracted.city,
+      state:   extracted.state,
+      zip:     extracted.zip,
+    }).catch((err) => {
+      console.error('[inbound/hubbell] Address match failed', err);
+      return [];
+    });
+
+    const topCandidate = candidates[0] ?? null;
+    const autoConfident = topCandidate !== null && topCandidate.confidence >= 85 && (
+      candidates.length === 1 || topCandidate.confidence - (candidates[1]?.confidence ?? 0) >= 20
+    );
+
+    matchStatus = topCandidate === null ? 'unmatched'
+      : autoConfident ? 'matched'
+      : 'pending';
+
+    if (topCandidate) {
+      topConfidence = topCandidate.confidence;
+      if (autoConfident) {
+        confirmedSoId     = topCandidate.soId;
+        confirmedCustCode = topCandidate.custCode;
+        confirmedCustName = topCandidate.custName;
+      }
+    }
+  }
 
   const db = getDb();
 
@@ -93,27 +141,34 @@ export async function POST(req: NextRequest) {
     fromEmail,
     fromName:             fromName ?? null,
     subject:              subjectText,
-    bodyText:             text ?? null,
+    bodyText:             bodyText || null,
     emailType:            extracted.emailType,
-    extractedPoNumber:    extracted.poNumber   ?? null,
-    extractedWoNumber:    extracted.woNumber   ?? null,
-    extractedAddress:     extracted.address    ?? null,
-    extractedCity:        extracted.city       ?? null,
-    extractedState:       extracted.state      ?? null,
-    extractedZip:         extracted.zip        ?? null,
-    extractedAmount:      extracted.amount != null ? String(extracted.amount) : null,
-    extractedDescription: extracted.description ?? null,
+    extractedPoNumber:    extracted.poNumber    ?? null,
+    extractedWoNumber:    extracted.woNumber    ?? null,
+    extractedAddress:     extracted.address     ?? null,
+    extractedCity:        extracted.city        ?? null,
+    extractedState:       extracted.state       ?? null,
+    extractedZip:         extracted.zip         ?? null,
+    extractedAmount:       extracted.amount         != null ? String(extracted.amount)   : null,
+    extractedTaxAmount:    extracted.taxAmount      != null ? String(extracted.taxAmount) : null,
+    extractedShipping:     extracted.shippingAmount != null ? String(extracted.shippingAmount) : null,
+    extractedNeedByDate:   extracted.needByDate    ?? null,
+    extractedContactName:  extracted.contactName   ?? null,
+    extractedContactPhone: extracted.contactPhone  ?? null,
+    extractedDescription:  extracted.description   ?? null,
     matchStatus,
-    confirmedSoId:     autoConfident ? topCandidate!.soId   : null,
-    confirmedCustCode: autoConfident ? topCandidate!.custCode : null,
-    confirmedCustName: autoConfident ? topCandidate!.custName : null,
-    matchConfidence:   topCandidate ? String(topCandidate.confidence) : null,
+    confirmedSoId,
+    confirmedCustCode,
+    confirmedCustName,
+    matchConfidence:   topConfidence != null ? String(topConfidence) : null,
+    confirmedBy:       cacheHit ? 'address_cache' : null,
+    confirmedAt:       cacheHit ? receivedAt : null,
     receivedAt,
   }).returning({ id: hubbellEmails.id });
 
   const emailId = emailRow.id;
 
-  // Store candidates
+  // Store candidates (only when we ran the matcher, not on cache hits)
   if (candidates.length > 0) {
     await db.insert(hubbellEmailCandidates).values(
       candidates.map((c) => ({
@@ -138,7 +193,8 @@ export async function POST(req: NextRequest) {
     `[inbound/hubbell] ${matchStatus} | ${extracted.emailType.toUpperCase()} | ` +
     `PO:${extracted.poNumber ?? '-'} WO:${extracted.woNumber ?? '-'} | ` +
     `addr:"${extracted.address ?? ''} ${extracted.city ?? ''}" | ` +
-    `top candidate: SO ${topCandidate?.soId ?? 'none'} @ ${topCandidate?.confidence ?? 0}% | ` +
+    `amount:${extracted.amount ?? '-'} | ` +
+    `${cacheHit ? `cache hit (SO ${cacheHit.soId})` : `top SO ${candidates[0]?.soId ?? 'none'} @ ${candidates[0]?.confidence ?? 0}%`} | ` +
     `from: ${fromEmail}`
   );
 
@@ -146,7 +202,10 @@ export async function POST(req: NextRequest) {
     ok: true,
     emailId,
     matchStatus,
+    cacheHit: !!cacheHit,
     candidateCount: candidates.length,
-    topMatch: topCandidate ? { soId: topCandidate.soId, confidence: topCandidate.confidence } : null,
+    topMatch: cacheHit
+      ? { soId: cacheHit.soId, confidence: 95 }
+      : candidates[0] ? { soId: candidates[0].soId, confidence: candidates[0].confidence } : null,
   });
 }
