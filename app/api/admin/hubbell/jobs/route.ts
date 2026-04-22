@@ -6,7 +6,7 @@ import { hubbellEmails } from '../../../../../db/schema';
 import { and, isNotNull, inArray } from 'drizzle-orm';
 
 // GET /api/admin/hubbell/jobs
-// All unique job sites (SOs with confirmed emails), newest first.
+// One row per job site (customer + address), aggregating all confirmed emails and SOs.
 // Uses two separate queries (bids DB + ERP DB) to avoid cross-schema permission issues.
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -48,68 +48,103 @@ export async function GET(req: NextRequest) {
     statsMap.set(soId, s);
   }
 
-  // Sort by most recent email first
-  const soIds = [...statsMap.entries()]
-    .sort((a, b) => b[1].lastReceived.getTime() - a[1].lastReceived.getTime())
-    .map(([id]) => id);
+  const soIds = [...statsMap.keys()];
 
-  // Step 3: Fetch SO details from ERP
+  // Step 3: Fetch SO details + AR balance from ERP
   const erpSql = getErpSql();
 
   type SoRow = {
     so_id: string;
     cust_code: string | null;
     cust_name: string | null;
-    so_status: string | null;
-    sale_type: string | null;
     shipto_address_1: string | null;
     shipto_city: string | null;
     shipto_state: string | null;
     shipto_zip: string | null;
+    ar_balance: string | null;
   };
 
   const soHeaders = await erpSql<SoRow[]>`
     SELECT
-      so_id::text,
-      TRIM(cust_code)  AS cust_code,
-      cust_name,
-      so_status,
-      sale_type,
-      shipto_address_1,
-      shipto_city,
-      shipto_state,
-      shipto_zip
-    FROM agility_so_header
-    WHERE so_id::text = ANY(${soIds})
-      AND is_deleted = false
+      soh.so_id::text,
+      TRIM(soh.cust_code)  AS cust_code,
+      soh.cust_name,
+      soh.shipto_address_1,
+      soh.shipto_city,
+      soh.shipto_state,
+      soh.shipto_zip,
+      COALESCE(ar.balance, 0)::text AS ar_balance
+    FROM agility_so_header soh
+    LEFT JOIN (
+      SELECT cust_key, SUM(open_amt) AS balance
+      FROM agility_ar_open
+      GROUP BY cust_key
+    ) ar ON ar.cust_key = TRIM(soh.cust_code)
+    WHERE soh.so_id::text = ANY(${soIds})
+      AND soh.is_deleted = false
   `;
 
-  const soMap = new Map(soHeaders.map((r) => [r.so_id, r]));
+  // Step 4: Group by job site (cust_code + shipto_address_1)
+  type JobGroup = {
+    cust_code: string | null;
+    cust_name: string | null;
+    shipto_address_1: string | null;
+    shipto_city: string | null;
+    shipto_state: string | null;
+    shipto_zip: string | null;
+    ar_balance: string | null;
+    so_ids: string[];
+    poCount: number;
+    woCount: number;
+    totalAmount: number;
+    lastReceived: Date;
+  };
 
-  // Merge, preserving sort order
-  const jobs = soIds
-    .map((soId) => {
-      const so = soMap.get(soId);
-      const s  = statsMap.get(soId)!;
-      if (!so) return null;
-      return {
-        so_id:            soId,
-        cust_code:        so.cust_code,
-        cust_name:        so.cust_name,
-        so_status:        so.so_status,
-        sale_type:        so.sale_type,
-        shipto_address_1: so.shipto_address_1,
-        shipto_city:      so.shipto_city,
-        shipto_state:     so.shipto_state,
-        shipto_zip:       so.shipto_zip,
-        email_count:      String(s.emailCount),
-        po_count:         String(s.poCount),
-        wo_count:         String(s.woCount),
-        total_amount:     String(s.totalAmount),
-        last_received:    s.lastReceived.toISOString(),
-      };
-    })
-    .filter(Boolean);
+  const groupMap = new Map<string, JobGroup>();
+
+  for (const so of soHeaders) {
+    const s = statsMap.get(so.so_id);
+    if (!s) continue;
+    const key = `${so.cust_code ?? ''}|${(so.shipto_address_1 ?? '').toLowerCase()}`;
+    const g = groupMap.get(key) ?? {
+      cust_code:        so.cust_code,
+      cust_name:        so.cust_name,
+      shipto_address_1: so.shipto_address_1,
+      shipto_city:      so.shipto_city,
+      shipto_state:     so.shipto_state,
+      shipto_zip:       so.shipto_zip,
+      ar_balance:       so.ar_balance,
+      so_ids:           [],
+      poCount:          0,
+      woCount:          0,
+      totalAmount:      0,
+      lastReceived:     new Date(0),
+    };
+    g.so_ids.push(so.so_id);
+    g.poCount      += s.poCount;
+    g.woCount      += s.woCount;
+    g.totalAmount  += s.totalAmount;
+    if (s.lastReceived > g.lastReceived) g.lastReceived = s.lastReceived;
+    groupMap.set(key, g);
+  }
+
+  // Sort by most recent email first
+  const jobs = [...groupMap.values()]
+    .sort((a, b) => b.lastReceived.getTime() - a.lastReceived.getTime())
+    .map((g) => ({
+      cust_code:        g.cust_code,
+      cust_name:        g.cust_name,
+      shipto_address_1: g.shipto_address_1,
+      shipto_city:      g.shipto_city,
+      shipto_state:     g.shipto_state,
+      shipto_zip:       g.shipto_zip,
+      ar_balance:       g.ar_balance,
+      so_ids:           g.so_ids,
+      po_count:         String(g.poCount),
+      wo_count:         String(g.woCount),
+      total_amount:     String(g.totalAmount),
+      last_received:    g.lastReceived.toISOString(),
+    }));
 
   return NextResponse.json({ jobs });
 }
