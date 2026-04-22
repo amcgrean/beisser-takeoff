@@ -11,7 +11,7 @@ export interface CreditMemo {
   po_number: string | null;
   so_status: string | null;
   salesperson: string | null;
-  order_date: string | null;
+  created_date: string | null;
   expect_date: string | null;
   address_1: string | null;
   city: string | null;
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     type RawRow = {
       so_id: string; system_id: string; cust_code: string | null; cust_name: string | null;
       reference: string | null; po_number: string | null; so_status: string | null;
-      salesperson: string | null; order_date: string | null; expect_date: string | null;
+      salesperson: string | null; created_date: string | null; expect_date: string | null;
       address_1: string | null; city: string | null;
       doc_count: string; latest_doc_received: string | null;
     };
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
           soh.po_number,
           soh.so_status,
           soh.salesperson,
-          soh.order_date::text             AS order_date,
+          soh.created_date::text           AS created_date,
           soh.expect_date::text            AS expect_date,
           soh.shipto_address_1             AS address_1,
           soh.shipto_city                  AS city,
@@ -94,8 +94,8 @@ export async function GET(req: NextRequest) {
         GROUP BY
           soh.so_id, soh.system_id, soh.cust_code, soh.cust_name,
           soh.reference, soh.po_number, soh.so_status, soh.salesperson,
-          soh.order_date, soh.expect_date, soh.shipto_address_1, soh.shipto_city
-        ORDER BY soh.order_date DESC NULLS LAST, soh.so_id DESC
+          soh.created_date, soh.expect_date, soh.shipto_address_1, soh.shipto_city
+        ORDER BY soh.created_date DESC NULLS LAST, soh.so_id DESC
         LIMIT ${limit} OFFSET ${offset}
       `,
       sql<{ total: number }[]>`
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
       po_number:           r.po_number?.trim()   || null,
       so_status:           r.so_status?.trim()   || null,
       salesperson:         r.salesperson?.trim() || null,
-      order_date:          r.order_date,
+      created_date:        r.created_date,
       expect_date:         r.expect_date,
       address_1:           r.address_1?.trim()   || null,
       city:                r.city?.trim()        || null,

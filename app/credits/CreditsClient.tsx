@@ -134,7 +134,7 @@ export default function CreditsClient() {
               <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
               <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell">Branch</th>
               <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Docs</th>
-              <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Order Date</th>
+              <th className="px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
@@ -190,7 +190,7 @@ export default function CreditsClient() {
                   )}
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell text-xs text-gray-500">
-                  {fmt(cm.order_date)}
+                  {fmt(cm.created_date)}
                 </td>
               </tr>
             ))}
