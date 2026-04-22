@@ -8,11 +8,12 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 // Verifies signature via Svix, uploads attachments to R2, upserts credit_images rows.
 
 type ResendAttachment = {
+  id?: string;             // UUID used to fetch content via Resend API (newer format)
   filename: string;
-  content: string;       // base64-encoded
+  content?: string;        // base64-encoded (present in older/small-payload format)
   content_type: string;
   content_disposition?: string;
-  content_id?: string;   // set on HTML-embedded parts (cid: references); absent on real file attachments
+  content_id?: string;     // set on HTML-embedded parts (cid: references); absent on real file attachments
   size?: number;
 };
 
@@ -20,6 +21,7 @@ type ResendEmailPayload = {
   type: string;
   created_at: string;
   data: {
+    email_id?: string;   // inbound email UUID — used to fetch attachments via Resend API
     from: string;
     to: string[];
     subject: string | null;
@@ -29,6 +31,59 @@ type ResendEmailPayload = {
     messageId?: string;
   };
 };
+
+// Resend no longer includes attachment content inline in the webhook.
+// Instead, call their API to get a short-lived download_url, then fetch the bytes.
+// Endpoint: GET https://api.resend.com/emails/receiving/{emailId}/attachments/{attachmentId}
+async function fetchAttachmentBuffer(att: ResendAttachment, emailId: string | undefined): Promise<Buffer | null> {
+  // Legacy / small payload: content was base64-encoded inline
+  if (att.content) {
+    try {
+      return Buffer.from(att.content, 'base64');
+    } catch {
+      // fall through to API fetch
+    }
+  }
+
+  if (!att.id || !emailId) {
+    console.warn('[inbound/credits] No content and no id/emailId for', att.filename);
+    return null;
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('[inbound/credits] RESEND_API_KEY not set — cannot fetch attachment');
+    return null;
+  }
+
+  try {
+    // Step 1: get the signed download_url from Resend
+    const metaRes = await fetch(
+      `https://api.resend.com/emails/receiving/${emailId}/attachments/${att.id}`,
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    if (!metaRes.ok) {
+      console.error('[inbound/credits] Resend attachment meta fetch failed', metaRes.status, att.filename);
+      return null;
+    }
+    const meta = await metaRes.json() as { download_url?: string };
+    if (!meta.download_url) {
+      console.error('[inbound/credits] No download_url in Resend attachment response', att.filename);
+      return null;
+    }
+
+    // Step 2: download the actual bytes
+    const fileRes = await fetch(meta.download_url);
+    if (!fileRes.ok) {
+      console.error('[inbound/credits] Attachment download failed', fileRes.status, att.filename);
+      return null;
+    }
+    return Buffer.from(await fileRes.arrayBuffer());
+  } catch (err) {
+    console.error('[inbound/credits] Error fetching attachment', att.filename, err);
+    return null;
+  }
+}
 
 function extractRmaNumber(subject: string | null, text: string | null, toAddresses: string[]): string {
   // Primary: extract from the TO address — most reliable because Resend routes
@@ -109,7 +164,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
-  const { from, subject, text, attachments } = payload.data;
+  const { email_id: emailId, from, subject, text, attachments } = payload.data;
   const rmaNumber = extractRmaNumber(subject, text, toAddresses);
   const receivedAt = payload.created_at ? new Date(payload.created_at) : new Date();
 
@@ -139,11 +194,9 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now();
     const r2Key = `credits/${rmaNumber}/${timestamp}-${safeFilename}`;
 
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(att.content, 'base64');
-    } catch {
-      console.warn('[inbound/credits] Could not decode attachment', att.filename);
+    const buffer = await fetchAttachmentBuffer(att, emailId);
+    if (!buffer) {
+      console.warn('[inbound/credits] Could not retrieve attachment', att.filename);
       continue;
     }
 
