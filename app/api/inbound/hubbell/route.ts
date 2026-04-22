@@ -74,6 +74,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
+  // Only handle emails addressed to hubbell@beisser.cloud
+  const toAddresses = payload.data.to ?? [];
+  if (!toAddresses.some(addr => /hubbell@beisser\.cloud$/i.test(addr))) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
   const { from, subject, text, html, messageId } = payload.data;
   const receivedAt = payload.created_at ? new Date(payload.created_at) : new Date();
   const { email: fromEmail, name: fromName } = parseFrom(from);
