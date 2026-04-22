@@ -3,7 +3,8 @@ import { auth } from '../../../auth';
 import { getErpSql } from '../../../db/supabase';
 
 // GET /api/credits?page=1&rma=&q=
-// Default (no search): paginated list of open credits joined to agility_ar_open.
+// Default (no search): paginated list of open credits — ci.rma_number joined to
+// agility_so_header.so_id where so_status='O' (open SOs only).
 // Search mode (rma or q param): grouped by RMA, up to 200 rows.
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -35,10 +36,10 @@ export async function GET(req: NextRequest) {
                    ci.email_from, ci.email_subject,
                    ci.received_at::text, ci.uploaded_at::text, ci.r2_key
             FROM credit_images ci
-            INNER JOIN agility_ar_open ar
-              ON ci.rma_number = ar.ref_num
-              AND ar.open_flag = true
-              AND ar.is_deleted = false
+            INNER JOIN agility_so_header soh
+              ON ci.rma_number = soh.so_id::text
+              AND UPPER(COALESCE(soh.so_status, '')) = 'O'
+              AND soh.is_deleted = false
             WHERE ci.rma_number ILIKE ${rma + '%'}
             ORDER BY ci.received_at DESC
             LIMIT 200
@@ -48,10 +49,10 @@ export async function GET(req: NextRequest) {
                    ci.email_from, ci.email_subject,
                    ci.received_at::text, ci.uploaded_at::text, ci.r2_key
             FROM credit_images ci
-            INNER JOIN agility_ar_open ar
-              ON ci.rma_number = ar.ref_num
-              AND ar.open_flag = true
-              AND ar.is_deleted = false
+            INNER JOIN agility_so_header soh
+              ON ci.rma_number = soh.so_id::text
+              AND UPPER(COALESCE(soh.so_status, '')) = 'O'
+              AND soh.is_deleted = false
             WHERE ci.rma_number ILIKE ${'%' + q + '%'}
                OR ci.email_from ILIKE ${'%' + q + '%'}
                OR ci.email_subject ILIKE ${'%' + q + '%'}
