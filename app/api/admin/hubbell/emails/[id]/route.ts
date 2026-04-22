@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../../auth';
 import { getDb } from '../../../../../../db/index';
 import { hubbellEmails, hubbellEmailCandidates } from '../../../../../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and, or, ne, inArray, sql } from 'drizzle-orm';
 import { upsertAddressCache } from '@/lib/hubbell/address-cache';
 
 type Params = Promise<{ id: string }>;
@@ -96,6 +96,35 @@ export async function POST(req: NextRequest, { params }: { params: Params }) {
         shiptoState:   shiptoCandidate?.shiptoState   ?? null,
         shiptoZip:     shiptoCandidate?.shiptoZip     ?? null,
       }).catch((err) => console.error('[hubbell/confirm] address cache upsert failed', err));
+    }
+
+    // Auto-confirm all pending siblings that share the same PO#, WO#, or extracted address
+    {
+      const siblingConds = [
+        ...(emailRow.extractedPoNumber ? [eq(hubbellEmails.extractedPoNumber, emailRow.extractedPoNumber)] : []),
+        ...(emailRow.extractedWoNumber ? [eq(hubbellEmails.extractedWoNumber, emailRow.extractedWoNumber)] : []),
+        ...(emailRow.extractedAddress
+          ? [sql`LOWER(${hubbellEmails.extractedAddress}) = LOWER(${emailRow.extractedAddress})`]
+          : []),
+      ];
+      if (siblingConds.length > 0) {
+        await db.update(hubbellEmails)
+          .set({
+            matchStatus:       'confirmed',
+            confirmedSoId:     body.soId,
+            confirmedCustCode: body.custCode ?? null,
+            confirmedCustName: body.custName ?? null,
+            matchConfidence:   '100',
+            confirmedBy:       'sibling_match',
+            confirmedAt:       now,
+            updatedAt:         now,
+          })
+          .where(and(
+            inArray(hubbellEmails.matchStatus, ['pending', 'matched', 'unmatched']),
+            ne(hubbellEmails.id, id),
+            or(...siblingConds),
+          ));
+      }
     }
 
   } else if (body.action === 'reject') {
