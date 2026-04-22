@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Webhook } from 'svix';
 import { getDb } from '../../../../db/index';
 import { hubbellEmails, hubbellEmailCandidates } from '../../../../db/schema';
+import { eq, and, or, isNotNull } from 'drizzle-orm';
 import { extractEmailData } from '@/lib/hubbell/extractor';
 import { matchAddress } from '@/lib/hubbell/address-matcher';
 import { checkAddressCache } from '@/lib/hubbell/address-cache';
@@ -117,8 +118,39 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Priority 1.5: same PO/WO already confirmed in a previous email ──────────
+  // Catches forwarded duplicates and follow-up emails for the same order.
+  type SiblingRow = { confirmedSoId: string; confirmedCustCode: string | null; confirmedCustName: string | null };
+  let siblingMatch: SiblingRow | null = null;
+
+  if (!poFieldMatch && poNumbers.length > 0) {
+    try {
+      const db15 = getDb();
+      const poWoConds = [
+        ...(extracted.poNumber ? [eq(hubbellEmails.extractedPoNumber, extracted.poNumber)] : []),
+        ...(extracted.woNumber ? [eq(hubbellEmails.extractedWoNumber, extracted.woNumber)] : []),
+      ];
+      const [existing] = await db15
+        .select({
+          confirmedSoId:     hubbellEmails.confirmedSoId,
+          confirmedCustCode: hubbellEmails.confirmedCustCode,
+          confirmedCustName: hubbellEmails.confirmedCustName,
+        })
+        .from(hubbellEmails)
+        .where(and(
+          eq(hubbellEmails.matchStatus, 'confirmed'),
+          isNotNull(hubbellEmails.confirmedSoId),
+          or(...poWoConds),
+        ))
+        .limit(1);
+      if (existing?.confirmedSoId) siblingMatch = existing as SiblingRow;
+    } catch (err) {
+      console.error('[inbound/hubbell] sibling match check failed', err);
+    }
+  }
+
   // ── Priority 2: learned address cache ─────────────────────────────────────
-  const cacheHit = (!poFieldMatch && extracted.address)
+  const cacheHit = (!poFieldMatch && !siblingMatch && extracted.address)
     ? await checkAddressCache(extracted.address).catch(() => null)
     : null;
 
@@ -127,6 +159,12 @@ export async function POST(req: NextRequest) {
     confirmedSoId     = poFieldMatch.so_id;
     confirmedCustCode = poFieldMatch.cust_code;
     confirmedCustName = poFieldMatch.cust_name;
+    topConfidence     = 100;
+  } else if (siblingMatch) {
+    matchStatus       = 'confirmed';
+    confirmedSoId     = siblingMatch.confirmedSoId;
+    confirmedCustCode = siblingMatch.confirmedCustCode;
+    confirmedCustName = siblingMatch.confirmedCustName;
     topConfidence     = 100;
   } else if (cacheHit) {
     matchStatus       = 'confirmed';
@@ -193,8 +231,8 @@ export async function POST(req: NextRequest) {
     confirmedCustCode,
     confirmedCustName,
     matchConfidence:   topConfidence != null ? String(topConfidence) : null,
-    confirmedBy:       poFieldMatch ? 'po_number_field' : cacheHit ? 'address_cache' : null,
-    confirmedAt:       (poFieldMatch || cacheHit) ? receivedAt : null,
+    confirmedBy:       poFieldMatch ? 'po_number_field' : siblingMatch ? 'sibling_match' : cacheHit ? 'address_cache' : null,
+    confirmedAt:       (poFieldMatch || siblingMatch || cacheHit) ? receivedAt : null,
     receivedAt,
   }).onConflictDoNothing().returning({ id: hubbellEmails.id });
 
@@ -232,7 +270,7 @@ export async function POST(req: NextRequest) {
     `PO:${extracted.poNumber ?? '-'} WO:${extracted.woNumber ?? '-'} | ` +
     `addr:"${extracted.address ?? ''} ${extracted.city ?? ''}" | ` +
     `amount:${extracted.amount ?? '-'} | ` +
-    `${poFieldMatch ? `po_number match SO ${poFieldMatch.so_id}` : cacheHit ? `cache hit SO ${cacheHit.soId}` : `top SO ${candidates[0]?.soId ?? 'none'} @ ${candidates[0]?.confidence ?? 0}%`} | ` +
+    `${poFieldMatch ? `po_number match SO ${poFieldMatch.so_id}` : siblingMatch ? `sibling match SO ${siblingMatch.confirmedSoId}` : cacheHit ? `cache hit SO ${cacheHit.soId}` : `top SO ${candidates[0]?.soId ?? 'none'} @ ${candidates[0]?.confidence ?? 0}%`} | ` +
     `from: ${fromEmail}`
   );
 
@@ -240,10 +278,13 @@ export async function POST(req: NextRequest) {
     ok: true,
     emailId,
     matchStatus,
-    poFieldMatch: !!poFieldMatch,
-    cacheHit: !!cacheHit,
+    poFieldMatch:  !!poFieldMatch,
+    siblingMatch:  !!siblingMatch,
+    cacheHit:      !!cacheHit,
     candidateCount: candidates.length,
-    topMatch: cacheHit
+    topMatch: siblingMatch
+      ? { soId: siblingMatch.confirmedSoId, confidence: 100 }
+      : cacheHit
       ? { soId: cacheHit.soId, confidence: 95 }
       : candidates[0] ? { soId: candidates[0].soId, confidence: candidates[0].confidence } : null,
   });
