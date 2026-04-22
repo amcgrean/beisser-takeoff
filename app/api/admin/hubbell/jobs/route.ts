@@ -60,28 +60,31 @@ export async function GET(req: NextRequest) {
     so_id: string;
     cust_code: string | null;
     cust_name: string | null;
-    so_status: string | null;
-    sale_type: string | null;
     shipto_address_1: string | null;
     shipto_city: string | null;
     shipto_state: string | null;
     shipto_zip: string | null;
+    ar_balance: string | null;
   };
 
   const soHeaders = await erpSql<SoRow[]>`
     SELECT
-      so_id::text,
-      TRIM(cust_code)  AS cust_code,
-      cust_name,
-      so_status,
-      sale_type,
-      shipto_address_1,
-      shipto_city,
-      shipto_state,
-      shipto_zip
-    FROM agility_so_header
-    WHERE so_id::text = ANY(${soIds})
-      AND is_deleted = false
+      soh.so_id::text,
+      TRIM(soh.cust_code)  AS cust_code,
+      soh.cust_name,
+      soh.shipto_address_1,
+      soh.shipto_city,
+      soh.shipto_state,
+      soh.shipto_zip,
+      COALESCE(ar.balance, 0)::text AS ar_balance
+    FROM agility_so_header soh
+    LEFT JOIN (
+      SELECT cust_key, SUM(open_amt) AS balance
+      FROM agility_ar_open
+      GROUP BY cust_key
+    ) ar ON ar.cust_key = TRIM(soh.cust_code)
+    WHERE soh.so_id::text = ANY(${soIds})
+      AND soh.is_deleted = false
   `;
 
   const soMap = new Map(soHeaders.map((r) => [r.so_id, r]));
@@ -96,8 +99,6 @@ export async function GET(req: NextRequest) {
         so_id:            soId,
         cust_code:        so.cust_code,
         cust_name:        so.cust_name,
-        so_status:        so.so_status,
-        sale_type:        so.sale_type,
         shipto_address_1: so.shipto_address_1,
         shipto_city:      so.shipto_city,
         shipto_state:     so.shipto_state,
@@ -107,6 +108,7 @@ export async function GET(req: NextRequest) {
         wo_count:         String(s.woCount),
         total_amount:     String(s.totalAmount),
         last_received:    s.lastReceived.toISOString(),
+        ar_balance:       so.ar_balance,
       };
     })
     .filter(Boolean);

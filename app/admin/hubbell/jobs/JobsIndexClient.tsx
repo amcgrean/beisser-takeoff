@@ -2,14 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MapPin, Package, Wrench, DollarSign, ChevronRight, RefreshCw, Inbox } from 'lucide-react';
+import { MapPin, Package, Wrench, ChevronRight, RefreshCw, Inbox } from 'lucide-react';
 
 type JobRow = {
   so_id: string;
   cust_code: string | null;
   cust_name: string | null;
-  so_status: string | null;
-  sale_type: string | null;
   shipto_address_1: string | null;
   shipto_city: string | null;
   shipto_state: string | null;
@@ -19,11 +17,12 @@ type JobRow = {
   wo_count: string;
   total_amount: string;
   last_received: string;
+  ar_balance: string | null;
 };
 
-function fmtAmount(v: string): string {
-  const n = parseFloat(v);
-  if (!n) return '—';
+function fmtAmount(v: string | null | undefined): string {
+  const n = parseFloat(v ?? '');
+  if (!n || isNaN(n)) return '—';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -32,9 +31,9 @@ function fmtDate(iso: string): string {
 }
 
 export default function JobsIndexClient() {
-  const [jobs, setJobs]     = useState<JobRow[]>([]);
+  const [jobs, setJobs]       = useState<JobRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState('');
+  const [error, setError]     = useState('');
 
   async function load() {
     setLoading(true);
@@ -52,6 +51,8 @@ export default function JobsIndexClient() {
   }
 
   useEffect(() => { load(); }, []);
+
+  const COL_COUNT = 7;
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -91,9 +92,9 @@ export default function JobsIndexClient() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Customer / Address</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">POs</th>
               <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">WOs</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Total</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Email Total</th>
+              <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">AR Balance</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Last Email</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">SO Status</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -101,14 +102,14 @@ export default function JobsIndexClient() {
             {loading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i} className="animate-pulse">
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: COL_COUNT }).map((_, j) => (
                     <td key={j} className="px-4 py-3"><div className="h-4 bg-slate-800 rounded" /></td>
                   ))}
                 </tr>
               ))
             ) : jobs.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
+                <td colSpan={COL_COUNT} className="px-4 py-12 text-center text-slate-500">
                   No confirmed jobs yet. Confirm emails in the{' '}
                   <Link href="/admin/hubbell" className="text-cyan-400 hover:text-cyan-300">inbox</Link> to see them here.
                 </td>
@@ -143,16 +144,19 @@ export default function JobsIndexClient() {
                   <td className="px-4 py-3 text-right font-mono text-sm text-green-300 font-medium">
                     {fmtAmount(job.total_amount)}
                   </td>
+                  <td className="px-4 py-3 text-right font-mono text-sm">
+                    {(() => {
+                      const bal = parseFloat(job.ar_balance ?? '');
+                      if (!bal || isNaN(bal)) return <span className="text-slate-500">—</span>;
+                      return (
+                        <span className={bal < 0 ? 'text-red-400' : 'text-amber-300'}>
+                          {fmtAmount(job.ar_balance)}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-xs text-slate-400">
                     {fmtDate(job.last_received)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-xs text-slate-400">{job.so_status ?? '—'}</span>
-                    {job.sale_type && (
-                      <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] bg-slate-700 text-slate-400">
-                        {job.sale_type}
-                      </span>
-                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
