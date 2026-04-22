@@ -113,7 +113,6 @@ async function main() {
       shipto_zip
     FROM agility_so_header
     WHERE so_id::text = ANY(${uniqueJobSeqs})
-      AND is_deleted = false
   `;
 
   const soMap = new Map(soRows.map(r => [r.so_id, r]));
