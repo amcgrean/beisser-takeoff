@@ -41,6 +41,8 @@ function extractPoNumber(subject: string, body: string): string | null {
     /\bOrder\s*(?:No\.?|Number)\s*:?\s*#?\s*([A-Z0-9\-]{3,20})/i,
     /\bPO\s*[-#:]\s*([A-Z0-9\-]{3,20})/i,
     /\bPO\s+([A-Z0-9]{4,20})\b/i,
+    /\bNew\s+PO(\d{4,})\b/i,   // "New PO001426-..."
+    /\bPO(\d{4,})\b/i,          // PO001426 (no separator)
   ], combined);
 }
 
@@ -85,6 +87,20 @@ function parseWoSubject(subject: string): {
   if (!m) return null;
   const rawAddr = m[1].trim();
   // Stop address at common delimiters if no explicit city block
+  const address = rawAddr.split(/,|;|\s{2,}/)[0].trim();
+  const city  = m[2]?.trim() ?? null;
+  const state = m[3]?.toUpperCase() ?? null;
+  const zip   = m[4] ?? null;
+  return { address, city, state, zip };
+}
+
+// Same structure for PO subjects: "New PO<n>-<Customer>-<Address>[, City, ST zip]"
+function parsePoSubject(subject: string): {
+  address: string | null; city: string | null; state: string | null; zip: string | null;
+} | null {
+  const m = subject.match(/\bNew\s+PO\d+[-\s]+[^-]+-\s*(\d{1,5}\s+.{3,60}?)(?:\s*,\s*([A-Za-z\s]+?)\s*,?\s*([A-Z]{2})\s+(\d{5}))?$/i);
+  if (!m) return null;
+  const rawAddr = m[1].trim();
   const address = rawAddr.split(/,|;|\s{2,}/)[0].trim();
   const city  = m[2]?.trim() ?? null;
   const state = m[3]?.toUpperCase() ?? null;
@@ -318,14 +334,15 @@ export function extractEmailData(subject: string, bodyText: string | null): Extr
   const contactPhone = extractContactPhone(body);
   const desc      = extractDescription(subject, body);
 
-  // Try structured WO subject format first ("New WO<n>-Customer-Address")
+  // Try structured subject formats first ("New WO<n>-Customer-Address" / "New PO<n>-...")
   const woSubject = parseWoSubject(subject);
+  const poSubject = parsePoSubject(subject);
   const bodyAddr  = extractAddress(body || subject);
 
-  const address = woSubject?.address ?? bodyAddr.address;
-  const city    = woSubject?.city    ?? bodyAddr.city;
-  const state   = woSubject?.state   ?? bodyAddr.state;
-  const zip     = woSubject?.zip     ?? bodyAddr.zip;
+  const address = woSubject?.address ?? poSubject?.address ?? bodyAddr.address;
+  const city    = woSubject?.city    ?? poSubject?.city    ?? bodyAddr.city;
+  const state   = woSubject?.state   ?? poSubject?.state   ?? bodyAddr.state;
+  const zip     = woSubject?.zip     ?? poSubject?.zip     ?? bodyAddr.zip;
 
   return {
     emailType, poNumber, woNumber,

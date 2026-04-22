@@ -8,7 +8,9 @@ import { getErpSql } from '../../../../../../db/supabase';
 type Params = Promise<{ soId: string }>;
 
 // GET /api/admin/hubbell/jobs/[soId]
-// Returns confirmed emails for a sales order, deduplicated by PO/WO number.
+// Returns confirmed emails for a sales order (deduplicated by PO/WO number),
+// the SO header, and all related SOs from ERP at the same customer + address
+// for the reconciliation view.
 export async function GET(req: NextRequest, { params }: { params: Params }) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -39,8 +41,7 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     .where(eq(hubbellEmails.confirmedSoId, soId))
     .orderBy(desc(hubbellEmails.receivedAt));
 
-  // Deduplicate by PO/WO number — keep the most recently received email per unique order number.
-  // Emails with no PO or WO number are kept as-is (they may be general job correspondence).
+  // Deduplicate by PO/WO number — keep the most recently received per unique order number.
   type EmailRow = (typeof allEmails)[0];
   const seenKeys = new Set<string>();
   const emails: EmailRow[] = [];
@@ -49,16 +50,14 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
   for (const email of allEmails) {
     const key = email.extractedPoNumber ?? email.extractedWoNumber ?? null;
     if (key) {
-      if (seenKeys.has(key)) {
-        duplicateCount++;
-        continue;
-      }
+      if (seenKeys.has(key)) { duplicateCount++; continue; }
       seenKeys.add(key);
     }
     emails.push(email);
   }
 
-  // Fetch SO header from ERP for context
+  const erpSql = getErpSql();
+
   type SoHeader = {
     so_id: string;
     cust_code: string | null;
@@ -77,14 +76,13 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
 
   let soHeader: SoHeader | null = null;
   try {
-    const erpSql = getErpSql();
     const [row] = await erpSql<SoHeader[]>`
       SELECT
         so_id::text,
-        TRIM(cust_code)  AS cust_code,
+        TRIM(cust_code)   AS cust_code,
         cust_name,
         reference,
-        po_number,
+        TRIM(po_number)   AS po_number,
         sale_type,
         so_status,
         salesperson,
@@ -103,7 +101,44 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     console.error('[hubbell/jobs] SO header fetch failed', err);
   }
 
-  // Summary stats — amounts counted once per unique PO/WO (deduplicated set)
+  // All SOs for the same customer + same ship-to address — used for the
+  // reconciliation view where the admin matches WO/PO emails to specific SOs.
+  type RelatedSo = SoHeader;
+  let relatedSOs: RelatedSo[] = [];
+
+  if (soHeader?.cust_code) {
+    const addrPrefix = (soHeader.shipto_address_1 ?? '').trim().toLowerCase().slice(0, 12);
+    try {
+      relatedSOs = await erpSql<RelatedSo[]>`
+        SELECT
+          so_id::text,
+          TRIM(cust_code)   AS cust_code,
+          cust_name,
+          reference,
+          TRIM(po_number)   AS po_number,
+          sale_type,
+          so_status,
+          salesperson,
+          expect_date::text AS expect_date,
+          shipto_address_1,
+          shipto_city,
+          shipto_state,
+          shipto_zip
+        FROM agility_so_header
+        WHERE TRIM(cust_code) = ${soHeader.cust_code.trim()}
+          AND is_deleted = false
+          ${addrPrefix
+            ? erpSql`AND LOWER(TRIM(shipto_address_1)) LIKE ${addrPrefix + '%'}`
+            : erpSql``}
+        ORDER BY so_id DESC
+        LIMIT 50
+      `;
+    } catch (err) {
+      console.error('[hubbell/jobs] Related SOs fetch failed', err);
+    }
+  }
+
+  // Summary stats — amounts counted once per unique PO/WO
   const totalAmount = emails.reduce((sum, e) => sum + (parseFloat(e.extractedAmount ?? '0') || 0), 0);
   const poCount = emails.filter((e) => e.emailType === 'po').length;
   const woCount = emails.filter((e) => e.emailType === 'wo').length;
@@ -112,6 +147,7 @@ export async function GET(req: NextRequest, { params }: { params: Params }) {
     soId,
     soHeader,
     emails,
+    relatedSOs,
     summary: { totalAmount, poCount, woCount, emailCount: emails.length, duplicateCount },
   });
 }

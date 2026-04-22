@@ -5,6 +5,7 @@ import { hubbellEmails, hubbellEmailCandidates } from '../../../../db/schema';
 import { extractEmailData } from '@/lib/hubbell/extractor';
 import { matchAddress } from '@/lib/hubbell/address-matcher';
 import { checkAddressCache } from '@/lib/hubbell/address-cache';
+import { getErpSql } from '../../../../db/supabase';
 
 // POST /api/inbound/hubbell
 // Resend inbound webhook — fires on email.received for hubbell@beisser.cloud
@@ -91,12 +92,43 @@ export async function POST(req: NextRequest) {
   let topConfidence:     number | null = null;
   let candidates: Awaited<ReturnType<typeof matchAddress>> = [];
 
-  // Check learned address cache first
-  const cacheHit = extracted.address
+  // ── Priority 1: match via agility_so_header.po_number field ──────────────
+  // Starting next week, Beisser SOs will have the Hubbell WO/PO number stored
+  // in the customer PO field. This gives a 100%-confidence exact match.
+  type SoPoRow = { so_id: string; system_id: string; cust_code: string | null; cust_name: string | null };
+  let poFieldMatch: SoPoRow | null = null;
+
+  const poNumbers = [extracted.woNumber, extracted.poNumber].filter(Boolean) as string[];
+  if (poNumbers.length > 0) {
+    try {
+      const erpSql = getErpSql();
+      for (const poNum of poNumbers) {
+        const rows = await erpSql<SoPoRow[]>`
+          SELECT so_id::text, system_id, TRIM(cust_code) AS cust_code, cust_name
+          FROM agility_so_header
+          WHERE TRIM(po_number) = ${poNum.trim()}
+            AND is_deleted = false
+          LIMIT 2
+        `;
+        if (rows.length === 1) { poFieldMatch = rows[0]; break; }
+      }
+    } catch (err) {
+      console.error('[inbound/hubbell] PO field match failed', err);
+    }
+  }
+
+  // ── Priority 2: learned address cache ─────────────────────────────────────
+  const cacheHit = (!poFieldMatch && extracted.address)
     ? await checkAddressCache(extracted.address).catch(() => null)
     : null;
 
-  if (cacheHit) {
+  if (poFieldMatch) {
+    matchStatus       = 'confirmed';
+    confirmedSoId     = poFieldMatch.so_id;
+    confirmedCustCode = poFieldMatch.cust_code;
+    confirmedCustName = poFieldMatch.cust_name;
+    topConfidence     = 100;
+  } else if (cacheHit) {
     matchStatus       = 'confirmed';
     confirmedSoId     = cacheHit.soId;
     confirmedCustCode = cacheHit.custCode;
@@ -161,8 +193,8 @@ export async function POST(req: NextRequest) {
     confirmedCustCode,
     confirmedCustName,
     matchConfidence:   topConfidence != null ? String(topConfidence) : null,
-    confirmedBy:       cacheHit ? 'address_cache' : null,
-    confirmedAt:       cacheHit ? receivedAt : null,
+    confirmedBy:       poFieldMatch ? 'po_number_field' : cacheHit ? 'address_cache' : null,
+    confirmedAt:       (poFieldMatch || cacheHit) ? receivedAt : null,
     receivedAt,
   }).onConflictDoNothing().returning({ id: hubbellEmails.id });
 
@@ -200,7 +232,7 @@ export async function POST(req: NextRequest) {
     `PO:${extracted.poNumber ?? '-'} WO:${extracted.woNumber ?? '-'} | ` +
     `addr:"${extracted.address ?? ''} ${extracted.city ?? ''}" | ` +
     `amount:${extracted.amount ?? '-'} | ` +
-    `${cacheHit ? `cache hit (SO ${cacheHit.soId})` : `top SO ${candidates[0]?.soId ?? 'none'} @ ${candidates[0]?.confidence ?? 0}%`} | ` +
+    `${poFieldMatch ? `po_number match SO ${poFieldMatch.so_id}` : cacheHit ? `cache hit SO ${cacheHit.soId}` : `top SO ${candidates[0]?.soId ?? 'none'} @ ${candidates[0]?.confidence ?? 0}%`} | ` +
     `from: ${fromEmail}`
   );
 
@@ -208,6 +240,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     emailId,
     matchStatus,
+    poFieldMatch: !!poFieldMatch,
     cacheHit: !!cacheHit,
     candidateCount: candidates.length,
     topMatch: cacheHit
