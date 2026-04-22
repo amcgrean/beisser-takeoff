@@ -139,18 +139,43 @@ export async function GET() {
     try {
       const erpSql = getErpSql();
 
-      // Open picks + work orders from dashboard_stats (all branches)
-      const statsRows = await erpSql<{ open_picks: number; open_work_orders: number }[]>`
-        SELECT
-          COALESCE(SUM(open_picks), 0)::int        AS open_picks,
-          COALESCE(SUM(open_work_orders), 0)::int  AS open_work_orders
-        FROM dashboard_stats
-        WHERE updated_at > NOW() - INTERVAL '10 minutes'
+      // Open picks: count distinct SOs in K/P/S status with at least one active line
+      const [picksRes] = await erpSql<{ cnt: number }[]>`
+        SELECT COUNT(DISTINCT soh.so_id)::int AS cnt
+        FROM agility_so_header soh
+        JOIN agility_so_lines sol
+          ON sol.system_id = soh.system_id AND sol.so_id = soh.so_id
+          AND sol.is_deleted = false
+        LEFT JOIN (
+          SELECT system_id, so_id, MAX(invoice_date::date) AS invoice_date
+          FROM agility_shipments
+          WHERE is_deleted = false
+          GROUP BY system_id, so_id
+        ) sh ON sh.system_id = soh.system_id AND sh.so_id = soh.so_id
+        WHERE soh.is_deleted = false
+          AND UPPER(COALESCE(soh.so_status, '')) NOT IN ('C')
+          AND (
+            UPPER(COALESCE(soh.so_status, '')) IN ('K', 'P', 'S')
+            OR (UPPER(COALESCE(soh.so_status, '')) = 'I'
+                AND sh.invoice_date = (NOW() AT TIME ZONE 'America/Chicago')::date)
+            OR soh.expect_date::date = (NOW() AT TIME ZONE 'America/Chicago')::date
+          )
+          AND UPPER(COALESCE(soh.sale_type, '')) NOT IN ('DIRECT', 'WILLCALL', 'XINSTALL', 'HOLD')
+          AND soh.system_id NOT IN ('', 'SYSTEM')
       `;
-      if (statsRows[0]) {
-        kpis.openPicks = statsRows[0].open_picks;
-        kpis.openWorkOrders = statsRows[0].open_work_orders;
-      }
+      kpis.openPicks = picksRes?.cnt ?? 0;
+
+      // Open work orders: count distinct WOs not completed/cancelled (by order, not by line)
+      const [woRes] = await erpSql<{ cnt: number }[]>`
+        SELECT COUNT(DISTINCT wh.wo_id)::int AS cnt
+        FROM agility_wo_header wh
+        LEFT JOIN agility_so_header soh
+          ON soh.so_id = wh.source_id::text AND soh.is_deleted = false
+        WHERE wh.is_deleted = false
+          AND UPPER(COALESCE(wh.wo_status, '')) NOT IN ('COMPLETED', 'CANCELED', 'C')
+          AND COALESCE(soh.system_id, '') NOT IN ('', 'SYSTEM')
+      `;
+      kpis.openWorkOrders = woRes?.cnt ?? 0;
 
       // Open orders count
       const [ordersRes] = await erpSql<{ cnt: number }[]>`
