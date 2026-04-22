@@ -139,10 +139,13 @@ export async function GET() {
     try {
       const erpSql = getErpSql();
 
-      // Open picks: count distinct SOs in K/P/S status (by order, not by line)
+      // Open picks: count distinct SOs in K/P/S status with at least one active line
       const [picksRes] = await erpSql<{ cnt: number }[]>`
         SELECT COUNT(DISTINCT soh.so_id)::int AS cnt
         FROM agility_so_header soh
+        JOIN agility_so_lines sol
+          ON sol.system_id = soh.system_id AND sol.so_id = soh.so_id
+          AND sol.is_deleted = false
         LEFT JOIN (
           SELECT system_id, so_id, MAX(invoice_date::date) AS invoice_date
           FROM agility_shipments

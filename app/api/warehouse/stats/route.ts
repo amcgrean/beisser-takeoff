@@ -30,11 +30,15 @@ export async function GET() {
       ? sql`AND soh.system_id = ${branchLock}`
       : sql`AND soh.system_id NOT IN ('', 'SYSTEM')`;
 
-    // Open picks per branch: count distinct SOs in K/P/S status (same criteria as picks board)
+    // Open picks per branch: count distinct SOs in K/P/S status with at least one active line
+    // (mirrors picks board which requires agility_so_lines with is_deleted = false)
     type TotalRow = { system_id: string; cnt: number };
     const totalRows = await sql<TotalRow[]>`
       SELECT soh.system_id, COUNT(DISTINCT soh.so_id)::int AS cnt
       FROM agility_so_header soh
+      JOIN agility_so_lines sol
+        ON sol.system_id = soh.system_id AND sol.so_id = soh.so_id
+        AND sol.is_deleted = false
       LEFT JOIN (
         SELECT system_id, so_id, MAX(invoice_date::date) AS invoice_date
         FROM agility_shipments
