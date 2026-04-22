@@ -20,7 +20,7 @@ export interface CreditMemo {
 }
 
 // GET /api/credits?q=&branch=&page=1
-// Returns open credit memos (sale_type='CM', not invoiced/closed/cancelled)
+// Returns open credit memos (sale_type='Credit', not invoiced/closed/cancelled)
 // from agility_so_header. Branch-scoped: non-admins see only their branch.
 // LEFT JOINs credit_images for doc count per CM.
 export async function GET(req: NextRequest) {
@@ -87,8 +87,8 @@ export async function GET(req: NextRequest) {
         FROM agility_so_header soh
         LEFT JOIN credit_images ci ON ci.rma_number = soh.so_id::text
         WHERE soh.is_deleted = false
-          AND UPPER(COALESCE(soh.sale_type,'')) = 'CM'
-          AND UPPER(COALESCE(soh.so_status,'')) NOT IN ('I','C','X')
+          AND soh.sale_type = 'Credit'
+          AND UPPER(COALESCE(soh.so_status,'')) NOT IN ('I','C')
           ${branchFilter}
           ${searchFilter}
         GROUP BY
@@ -102,8 +102,8 @@ export async function GET(req: NextRequest) {
         SELECT COUNT(*)::int AS total
         FROM agility_so_header soh
         WHERE soh.is_deleted = false
-          AND UPPER(COALESCE(soh.sale_type,'')) = 'CM'
-          AND UPPER(COALESCE(soh.so_status,'')) NOT IN ('I','C','X')
+          AND soh.sale_type = 'Credit'
+          AND UPPER(COALESCE(soh.so_status,'')) NOT IN ('I','C')
           ${branchFilter}
           ${searchFilter}
       `,
