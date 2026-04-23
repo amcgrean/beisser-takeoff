@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Link from 'next/link';
 import {
   Search, ChevronLeft, ChevronRight, Loader2, Paperclip, FileText,
   ExternalLink, ChevronDown, ChevronUp, Mail, Upload,
@@ -317,9 +316,7 @@ export default function CreditsClient() {
                 <>
                   <tr key={cm.so_id} className={`hover:bg-gray-900/50 transition-colors ${expandedSoId === cm.so_id ? 'bg-gray-900/40' : ''}`}>
                     <td className="px-4 py-3 font-mono text-cyan-400 font-medium whitespace-nowrap">
-                      <Link href={`/credits/${cm.so_id}`} className="hover:underline">
-                        {cm.so_id}
-                      </Link>
+                      {cm.so_id}
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
                       <div className="truncate text-gray-200">{cm.cust_name ?? '—'}</div>
