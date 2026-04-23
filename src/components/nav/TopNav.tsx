@@ -239,7 +239,7 @@ function getDomains(tvBranch: string): Domain[] {
       label: 'Sales',
       icon: <ShoppingCart className="w-4 h-4" />,
       dropdown: true,
-      isActive: (p) => p.startsWith('/sales') || p.startsWith('/credits'),
+      isActive: (p) => p.startsWith('/sales') || p.startsWith('/credits') || p.startsWith('/scorecard'),
       links: [
         { href: '/sales',               label: 'Sales Hub' },
         { href: '/sales/customers',     label: 'Customers' },
@@ -247,6 +247,7 @@ function getDomains(tvBranch: string): Domain[] {
         { href: '/sales/history',       label: 'Purchase History' },
         { href: '/sales/products',      label: 'Products & Stock' },
         { href: '/sales/reports',       label: 'Reports' },
+        { href: '/scorecard',           label: 'Customer Scorecard' },
         { href: '/sales/tracker',       label: 'Sales Tracker',    requireAnyRole: ['sales', 'ops', 'supervisor'] },
         { href: '/sales/deliveries',    label: 'Sales Deliveries', requireAnyRole: ['sales', 'ops', 'supervisor'] },
         { href: '/sales/rep-dashboard', label: 'Rep Dashboard',    requireAnyRole: ['sales'] },
