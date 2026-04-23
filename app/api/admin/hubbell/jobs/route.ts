@@ -88,47 +88,25 @@ export async function GET(req: NextRequest) {
       AND soh.is_deleted = false
   `;
 
-  // Step 3b: Resolve cust_key for each unique cust_code (same pattern as /api/sales/customers/[code]/ar).
-  const uniqueCodes = [...new Set(soHeaders.map((s) => (s.cust_code ?? '').trim()).filter(Boolean))];
-  type CustKeyRow = { cust_code: string; cust_key: string };
-  const custKeyRows = uniqueCodes.length
-    ? await erpSql<CustKeyRow[]>`
-        SELECT DISTINCT ON (TRIM(cust_code))
-          TRIM(cust_code) AS cust_code,
-          cust_key::text  AS cust_key
-        FROM agility_customers
-        WHERE TRIM(cust_code) = ANY(${uniqueCodes})
-          AND is_deleted = false
-      `
-    : [];
-
-  // cust_code (lower) → cust_key string
-  const codeToKey = new Map(custKeyRows.map((r) => [r.cust_code.toLowerCase(), r.cust_key]));
-
-  // Step 3c: Fetch open AR totals by cust_key.
-  const custKeys = custKeyRows.map((r) => r.cust_key);
-  type ArRow = { cust_key: string; balance: string };
-  const arRows = custKeys.length
+  // Step 3b: Fetch open AR per SO — ref_num in agility_ar_open equals the SO/invoice number.
+  // Cast ref_num to text so the ANY() comparison works regardless of stored type.
+  type ArRow = { so_id: string; balance: string };
+  const arRows = soIds.length
     ? await erpSql<ArRow[]>`
-        SELECT cust_key::text AS cust_key, SUM(open_amt)::text AS balance
+        SELECT ref_num::text AS so_id, SUM(open_amt)::text AS balance
         FROM agility_ar_open
-        WHERE cust_key::text = ANY(${custKeys})
+        WHERE ref_num::text = ANY(${soIds})
           AND is_deleted = false
-        GROUP BY cust_key
+        GROUP BY ref_num
       `
     : [];
 
-  // cust_key string → open AR balance
-  const keyToBalance = new Map(arRows.map((r) => [r.cust_key, parseFloat(r.balance ?? '0') || 0]));
-
-  function arForCode(code: string | null): number {
-    const key = codeToKey.get((code ?? '').toLowerCase().trim());
-    return key ? (keyToBalance.get(key) ?? 0) : 0;
-  }
+  // so_id string → open AR balance for that specific job
+  const soArBalance = new Map(arRows.map((r) => [r.so_id, parseFloat(r.balance ?? '0') || 0]));
 
   // Step 4: Group by job site (canonical cust_code + shipto_address_1).
   // Aliased codes (e.g. hubb1700 → hubb1200) collapse into the same row.
-  // AR balance is per-customer (one lookup per unique cust_code, not summed per SO).
+  // AR balance is summed across all SOs in the group.
   type JobGroup = {
     cust_code: string | null;
     cust_name: string | null;
@@ -151,16 +129,14 @@ export async function GET(req: NextRequest) {
     if (!s) continue;
     const canonical = canonicalCustCode(so.cust_code);
     const key = `${canonical}|${(so.shipto_address_1 ?? '').toLowerCase()}`;
-    const existing = groupMap.get(key);
-    const g = existing ?? {
+    const g = groupMap.get(key) ?? {
       cust_code:        so.cust_code,
       cust_name:        so.cust_name,
       shipto_address_1: so.shipto_address_1,
       shipto_city:      so.shipto_city,
       shipto_state:     so.shipto_state,
       shipto_zip:       so.shipto_zip,
-      // AR is per-customer — set once when creating the group, not accumulated per SO.
-      arBalance:        arForCode(so.cust_code),
+      arBalance:        0,
       so_ids:           [],
       poCount:          0,
       woCount:          0,
@@ -171,6 +147,7 @@ export async function GET(req: NextRequest) {
     g.poCount     += s.poCount;
     g.woCount     += s.woCount;
     g.totalAmount += s.totalAmount;
+    g.arBalance   += soArBalance.get(so.so_id) ?? 0;
     if (s.lastReceived > g.lastReceived) g.lastReceived = s.lastReceived;
     groupMap.set(key, g);
   }
