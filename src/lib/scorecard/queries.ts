@@ -17,8 +17,6 @@ import type {
 
 /** Returns YYYY-MM-DD clamped to the last valid day of month in `year`. */
 function clampCutoff(year: number, month: number, day: number): string {
-  // new Date(year, month, 0) = day-0 of following month = last day of `month`
-  // month here is 1-indexed: new Date(2025, 2, 0) → Feb 28, 2025
   const lastDay = new Date(year, month, 0).getDate();
   const d = Math.min(day, lastDay);
   return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -37,11 +35,24 @@ function getCutoffs(
     };
   }
   const d = new Date(cutoffDate);
-  const month = d.getUTCMonth() + 1; // 1-indexed
+  const month = d.getUTCMonth() + 1;
   const day = d.getUTCDate();
   return {
     baseCutoff: clampCutoff(baseYear, month, day),
     compareCutoff: clampCutoff(compareYear, month, day),
+  };
+}
+
+/**
+ * Returns the timestamp range that covers both baseYear and compareYear.
+ * Using date ranges (not EXTRACT) lets Postgres use the (customer_id, invoice_date) composite index.
+ */
+function yearRange(baseYear: number, compareYear: number): { dateFrom: string; dateTo: string } {
+  const minYear = Math.min(baseYear, compareYear);
+  const maxYear = Math.max(baseYear, compareYear);
+  return {
+    dateFrom: `${minYear}-01-01`,
+    dateTo: `${maxYear + 1}-01-01`,
   };
 }
 
@@ -68,6 +79,7 @@ export async function fetchCustomerList(
   limit = 200,
 ): Promise<CustomerListRow[]> {
   const sql = getErpSql();
+  const { dateFrom, dateTo } = yearRange(baseYear, compareYear);
 
   type Row = {
     customer_id: string;
@@ -84,19 +96,23 @@ export async function fetchCustomerList(
           customer_id,
           MAX(customer_name) AS customer_name,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+            WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+              AND invoice_date < make_date(${baseYear + 1}, 1, 1)
           )::numeric(18,2)::text AS sales_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${compareYear}
+            WHERE invoice_date >= make_date(${compareYear}, 1, 1)
+              AND invoice_date < make_date(${compareYear + 1}, 1, 1)
           )::numeric(18,2)::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+            WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+              AND invoice_date < make_date(${baseYear + 1}, 1, 1)
           )::numeric(18,2)::text AS gp_base,
           array_agg(DISTINCT branch_id) FILTER (WHERE branch_id IS NOT NULL) AS branch_ids
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${baseYear}, ${compareYear}]::int[])
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
           AND branch_id = ANY(${branchIds}::text[])
           AND (
             ${search} = ''
@@ -105,7 +121,8 @@ export async function fetchCustomerList(
           )
         GROUP BY customer_id
         ORDER BY SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+          WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+            AND invoice_date < make_date(${baseYear + 1}, 1, 1)
         ) DESC NULLS LAST
         LIMIT ${limit}
       `
@@ -114,19 +131,23 @@ export async function fetchCustomerList(
           customer_id,
           MAX(customer_name) AS customer_name,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+            WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+              AND invoice_date < make_date(${baseYear + 1}, 1, 1)
           )::numeric(18,2)::text AS sales_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${compareYear}
+            WHERE invoice_date >= make_date(${compareYear}, 1, 1)
+              AND invoice_date < make_date(${compareYear + 1}, 1, 1)
           )::numeric(18,2)::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+            WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+              AND invoice_date < make_date(${baseYear + 1}, 1, 1)
           )::numeric(18,2)::text AS gp_base,
           array_agg(DISTINCT branch_id) FILTER (WHERE branch_id IS NOT NULL) AS branch_ids
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${baseYear}, ${compareYear}]::int[])
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
           AND (
             ${search} = ''
             OR customer_name ILIKE ${'%' + search + '%'}
@@ -134,7 +155,8 @@ export async function fetchCustomerList(
           )
         GROUP BY customer_id
         ORDER BY SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${baseYear}
+          WHERE invoice_date >= make_date(${baseYear}, 1, 1)
+            AND invoice_date < make_date(${baseYear + 1}, 1, 1)
         ) DESC NULLS LAST
         LIMIT ${limit}
       `;
@@ -167,7 +189,7 @@ export async function searchCustomers(
         customer_name ILIKE ${'%' + query + '%'}
         OR customer_id ILIKE ${'%' + query + '%'}
       )
-    ORDER BY customer_id, MAX(invoice_date) DESC
+    ORDER BY customer_id, invoice_date DESC
     LIMIT ${limit}
   `;
   return rows.map((r) => ({ customerId: r.customer_id, customerName: r.customer_name }));
@@ -185,6 +207,7 @@ export async function fetchKpis(params: ScorecardParams): Promise<KpiComparison>
     params.cutoffDate,
     params.period,
   );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
 
   type Row = {
     customer_name: string | null;
@@ -227,8 +250,9 @@ export async function fetchKpis(params: ScorecardParams): Promise<KpiComparison>
           FROM customer_scorecard_fact
           WHERE is_deleted = false
             AND NOT is_sale_type_excluded
-            AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
             AND customer_id = ${params.customerId}
+            AND invoice_date >= ${dateFrom}::timestamp
+            AND invoice_date < ${dateTo}::timestamp
             AND branch_id = ANY(${params.branchIds}::text[])
         )
         SELECT
@@ -271,8 +295,9 @@ export async function fetchKpis(params: ScorecardParams): Promise<KpiComparison>
           FROM customer_scorecard_fact
           WHERE is_deleted = false
             AND NOT is_sale_type_excluded
-            AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
             AND customer_id = ${params.customerId}
+            AND invoice_date >= ${dateFrom}::timestamp
+            AND invoice_date < ${dateTo}::timestamp
         )
         SELECT
           MAX(customer_name) AS customer_name,
@@ -337,76 +362,82 @@ export async function fetchThreeYear(params: ScorecardParams): Promise<ThreeYear
     params.cutoffDate,
     params.period,
   );
-
   const prior1 = params.baseYear - 1;
   const prior2 = params.baseYear - 2;
 
   type Row = {
-    cy_sales: string | null;
-    cy_gp: string | null;
-    py1_sales: string | null;
-    py1_gp: string | null;
-    py2_sales: string | null;
-    py2_gp: string | null;
+    cy_sales: string | null; cy_gp: string | null;
+    py1_sales: string | null; py1_gp: string | null;
+    py2_sales: string | null; py2_gp: string | null;
   };
 
   const [r] = params.branchIds.length > 0
     ? await sql<Row[]>`
         SELECT
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS cy_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS cy_gp,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior1}
+            WHERE invoice_date >= make_date(${prior1}, 1, 1)
+              AND invoice_date < make_date(${prior1 + 1}, 1, 1)
           )::text AS py1_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior1}
+            WHERE invoice_date >= make_date(${prior1}, 1, 1)
+              AND invoice_date < make_date(${prior1 + 1}, 1, 1)
           )::text AS py1_gp,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior2}
+            WHERE invoice_date >= make_date(${prior2}, 1, 1)
+              AND invoice_date < make_date(${prior2 + 1}, 1, 1)
           )::text AS py2_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior2}
+            WHERE invoice_date >= make_date(${prior2}, 1, 1)
+              AND invoice_date < make_date(${prior2 + 1}, 1, 1)
           )::text AS py2_gp
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${prior1}, ${prior2}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${String(prior2) + '-01-01'}::timestamp
+          AND invoice_date < ${String(params.baseYear + 1) + '-01-01'}::timestamp
           AND branch_id = ANY(${params.branchIds}::text[])
       `
     : await sql<Row[]>`
         SELECT
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS cy_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS cy_gp,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior1}
+            WHERE invoice_date >= make_date(${prior1}, 1, 1)
+              AND invoice_date < make_date(${prior1 + 1}, 1, 1)
           )::text AS py1_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior1}
+            WHERE invoice_date >= make_date(${prior1}, 1, 1)
+              AND invoice_date < make_date(${prior1 + 1}, 1, 1)
           )::text AS py1_gp,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior2}
+            WHERE invoice_date >= make_date(${prior2}, 1, 1)
+              AND invoice_date < make_date(${prior2 + 1}, 1, 1)
           )::text AS py2_sales,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${prior2}
+            WHERE invoice_date >= make_date(${prior2}, 1, 1)
+              AND invoice_date < make_date(${prior2 + 1}, 1, 1)
           )::text AS py2_gp
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${prior1}, ${prior2}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${String(prior2) + '-01-01'}::timestamp
+          AND invoice_date < ${String(params.baseYear + 1) + '-01-01'}::timestamp
       `;
 
   const periodLabel = params.period === 'YTD'
@@ -414,24 +445,9 @@ export async function fetchThreeYear(params: ScorecardParams): Promise<ThreeYear
     : 'Full Year';
 
   return [
-    {
-      year: params.baseYear,
-      label: `${params.baseYear} ${periodLabel}`,
-      sales: toNum(r?.cy_sales) ?? 0,
-      gp: toNum(r?.cy_gp) ?? 0,
-    },
-    {
-      year: prior1,
-      label: `12/31/${prior1}`,
-      sales: toNum(r?.py1_sales) ?? 0,
-      gp: toNum(r?.py1_gp) ?? 0,
-    },
-    {
-      year: prior2,
-      label: `12/31/${prior2}`,
-      sales: toNum(r?.py2_sales) ?? 0,
-      gp: toNum(r?.py2_gp) ?? 0,
-    },
+    { year: params.baseYear, label: `${params.baseYear} ${periodLabel}`, sales: toNum(r?.cy_sales) ?? 0, gp: toNum(r?.cy_gp) ?? 0 },
+    { year: prior1,           label: `12/31/${prior1}`,                  sales: toNum(r?.py1_sales) ?? 0, gp: toNum(r?.py1_gp) ?? 0 },
+    { year: prior2,           label: `12/31/${prior2}`,                  sales: toNum(r?.py2_sales) ?? 0, gp: toNum(r?.py2_gp) ?? 0 },
   ];
 }
 
@@ -447,6 +463,7 @@ export async function fetchProductMajors(params: ScorecardParams): Promise<Produ
     params.cutoffDate,
     params.period,
   );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
 
   type Row = {
     product_major_code: string | null;
@@ -463,30 +480,31 @@ export async function fetchProductMajors(params: ScorecardParams): Promise<Produ
           COALESCE(product_major_code, '') AS product_major_code,
           COALESCE(product_major, 'Unknown') AS product_major,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
           AND branch_id = ANY(${params.branchIds}::text[])
         GROUP BY product_major_code, product_major
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `
@@ -495,29 +513,30 @@ export async function fetchProductMajors(params: ScorecardParams): Promise<Produ
           COALESCE(product_major_code, '') AS product_major_code,
           COALESCE(product_major, 'Unknown') AS product_major,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
         GROUP BY product_major_code, product_major
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `;
@@ -547,6 +566,7 @@ export async function fetchProductMinors(
     params.cutoffDate,
     params.period,
   );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
 
   type Row = {
     product_minor_code: string | null;
@@ -563,31 +583,32 @@ export async function fetchProductMinors(
           COALESCE(product_minor_code, '') AS product_minor_code,
           COALESCE(product_minor, 'Unknown') AS product_minor,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
           AND product_major_code = ${majorCode}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
           AND branch_id = ANY(${params.branchIds}::text[])
         GROUP BY product_minor_code, product_minor
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `
@@ -596,30 +617,31 @@ export async function fetchProductMinors(
           COALESCE(product_minor_code, '') AS product_minor_code,
           COALESCE(product_minor, 'Unknown') AS product_minor,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
           AND product_major_code = ${majorCode}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
         GROUP BY product_minor_code, product_minor
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `;
@@ -646,6 +668,7 @@ export async function fetchSaleTypes(params: ScorecardParams): Promise<SaleTypeR
     params.cutoffDate,
     params.period,
   );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
 
   type Row = {
     category: string | null;
@@ -660,30 +683,31 @@ export async function fetchSaleTypes(params: ScorecardParams): Promise<SaleTypeR
         SELECT
           COALESCE(sale_type_reporting_category, 'Other') AS category,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
           AND branch_id = ANY(${params.branchIds}::text[])
         GROUP BY sale_type_reporting_category
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `
@@ -691,29 +715,30 @@ export async function fetchSaleTypes(params: ScorecardParams): Promise<SaleTypeR
         SELECT
           COALESCE(sale_type_reporting_category, 'Other') AS category,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS sales_base,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
               AND invoice_date::date <= ${baseCutoff}::date
           )::text AS gp_base,
           SUM(sales_amount) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS sales_compare,
           SUM(gross_profit) FILTER (
-            WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.compareYear}
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
               AND invoice_date::date <= ${compareCutoff}::date
           )::text AS gp_compare
         FROM customer_scorecard_fact
         WHERE is_deleted = false
           AND NOT is_sale_type_excluded
-          AND EXTRACT(YEAR FROM invoice_date) = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
           AND customer_id = ${params.customerId}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
         GROUP BY sale_type_reporting_category
         ORDER BY COALESCE(SUM(sales_amount) FILTER (
-          WHERE EXTRACT(YEAR FROM invoice_date)::int = ${params.baseYear}
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
             AND invoice_date::date <= ${baseCutoff}::date
         ), 0) DESC
       `;
@@ -738,16 +763,18 @@ export async function fetchDaysToPay(params: ScorecardParams): Promise<DaysToPay
   const [r] = await sql<Row[]>`
     SELECT
       AVG(days_to_pay) FILTER (
-        WHERE EXTRACT(YEAR FROM COALESCE(payment_date, invoice_date))::int = ${params.baseYear}
+        WHERE payment_date >= make_date(${params.baseYear}, 1, 1)
+          AND payment_date < make_date(${params.baseYear + 1}, 1, 1)
       )::text AS avg_base,
       AVG(days_to_pay) FILTER (
-        WHERE EXTRACT(YEAR FROM COALESCE(payment_date, invoice_date))::int = ${params.compareYear}
+        WHERE payment_date >= make_date(${params.compareYear}, 1, 1)
+          AND payment_date < make_date(${params.compareYear + 1}, 1, 1)
       )::text AS avg_compare
     FROM customer_payments
     WHERE is_deleted = false
       AND customer_id = ${params.customerId}
-      AND EXTRACT(YEAR FROM COALESCE(payment_date, invoice_date))
-          = ANY(ARRAY[${params.baseYear}, ${params.compareYear}]::int[])
+      AND payment_date >= make_date(${Math.min(params.baseYear, params.compareYear)}, 1, 1)
+      AND payment_date < make_date(${Math.max(params.baseYear, params.compareYear) + 1}, 1, 1)
   `;
 
   return {
