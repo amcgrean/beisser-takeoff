@@ -67,6 +67,50 @@ export interface ProductOrderRow {
   gp: number;
 }
 
+// ---------------------------------------------------------------------------
+// Product Scorecard (aggregate across all customers, by product group)
+// ---------------------------------------------------------------------------
+
+export interface ProductScorecardMajorRow {
+  productMajorCode: string;
+  productMajor: string;
+  salesBase: number;
+  gpBase: number;
+  soCountBase: number;
+  creditCountBase: number;
+  qtyBase: number;
+  salesCompare: number;
+  gpCompare: number;
+  soCountCompare: number;
+  qtyCompare: number;
+}
+
+export interface ProductScorecardMinorRow {
+  productMinorCode: string;
+  productMinor: string;
+  salesBase: number;
+  gpBase: number;
+  soCountBase: number;
+  creditCountBase: number;
+  qtyBase: number;
+  salesCompare: number;
+  gpCompare: number;
+  soCountCompare: number;
+  qtyCompare: number;
+}
+
+export interface ProductScorecardItemRow {
+  itemNumber: string;
+  itemDescription: string;
+  salesBase: number;
+  gpBase: number;
+  soCountBase: number;
+  qtyBase: number;
+  salesCompare: number;
+  soCountCompare: number;
+  qtyCompare: number;
+}
+
 export interface SaleTypeRow {
   category: string;
   salesBase: number;
