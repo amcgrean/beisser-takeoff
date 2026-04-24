@@ -386,6 +386,7 @@ export default function ProductsClient({ isAdmin, userBranch }: Props) {
   const visibleTotal = isSearchMode ? searchTotal : browseTotal;
   const visibleLoading = isSearchMode ? searchLoading : loading;
   const canLoadMore = visibleProducts.length < visibleTotal;
+  const showingAllBranchRows = isAdmin && branch.trim() === '' && (isSearchMode || browseLevel.mode === 'items');
 
   return (
     <div className="p-4 md:p-6 space-y-4">
@@ -460,6 +461,13 @@ export default function ProductsClient({ isAdmin, userBranch }: Props) {
             </span>
           )}
         </div>
+
+        {showingAllBranchRows && (
+          <div className="border-b border-white/10 bg-cyan-500/10 px-4 py-2 text-xs text-cyan-100">
+            Showing one row per branch so stock quantity and location stay branch-specific. Enter a branch code to narrow
+            the list.
+          </div>
+        )}
 
         {isSearchMode ? (
           <ProductsTable

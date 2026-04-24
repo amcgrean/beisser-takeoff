@@ -26,7 +26,12 @@ const BASE_SEARCH_COLUMNS = [
   'default_location',
 ] as const;
 
+let columnCache: Set<string> | null = null;
+const groupSourceCache = new Map<string, GroupSource>();
+
 export async function getAgilityItemColumns(sql: ErpSql): Promise<Set<string>> {
+  if (columnCache) return columnCache;
+
   const rows = (await sql.unsafe(
     `SELECT column_name
      FROM information_schema.columns
@@ -34,7 +39,8 @@ export async function getAgilityItemColumns(sql: ErpSql): Promise<Set<string>> {
        AND table_name = 'agility_items'`
   )) as ColumnRow[];
 
-  return new Set(rows.map((row) => row.column_name));
+  columnCache = new Set(rows.map((row) => row.column_name));
+  return columnCache;
 }
 
 export function getProductCapabilities(columns: Set<string>): ProductCapabilities {
@@ -93,6 +99,10 @@ export async function resolveGroupSource(
   branch: string,
   includeInactive: boolean
 ): Promise<GroupSource> {
+  const cacheKey = `${branch || 'all'}:${includeInactive ? 'include-inactive' : 'active-stock'}`;
+  const cached = groupSourceCache.get(cacheKey);
+  if (cached) return cached;
+
   const params: unknown[] = [];
   const where: string[] = [];
   appendBaseProductFilters(where, params, branch, includeInactive);
@@ -106,7 +116,9 @@ export async function resolveGroupSource(
     params as never[]
   )) as unknown[];
 
-  return rows.length > 0 ? 'link_product_group' : 'handling_code';
+  const source = rows.length > 0 ? 'link_product_group' : 'handling_code';
+  groupSourceCache.set(cacheKey, source);
+  return source;
 }
 
 export function getSearchColumns(columns: Set<string>): string[] {
