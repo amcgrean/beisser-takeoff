@@ -1,67 +1,56 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { getErpSql } from '../../../../../db/supabase';
-import {
-  appendBaseProductFilters,
-  formatProductLabel,
-  getAgilityItemColumns,
-  getGroupColumn,
-  getProductCapabilities,
-  isProductAdmin,
-  parseIncludeInactive,
-  resolveGroupSource,
-} from '../_shared';
+import { getSelectedBranchCode } from '@/lib/branch-context';
+import { formatProductLabel, isProductAdmin } from '../_shared';
 
-type GroupRow = {
+type MajorRow = {
   code: string;
+  label: string | null;
   item_count: number;
 };
 
-// GET /api/sales/products/groups?branch=20GR
-export async function GET(req: NextRequest) {
+// GET /api/sales/products/groups
+// Returns distinct product majors from customer_scorecard_fact, scoped to the
+// branch selected in the nav (beisser-branch cookie) for admins.
+export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { searchParams } = req.nextUrl;
   const isAdmin = isProductAdmin(session.user);
-  const includeInactive = isAdmin && parseIncludeInactive(searchParams.get('includeInactive'));
   const effectiveBranch = isAdmin
-    ? (searchParams.get('branch')?.trim() ?? '')
+    ? (await getSelectedBranchCode() ?? '')
     : (session.user.branch ?? '');
 
   try {
     const sql = getErpSql();
-    const columns = await getAgilityItemColumns(sql);
-    const capabilities = getProductCapabilities(columns);
-    const groupSource = await resolveGroupSource(sql, effectiveBranch, includeInactive);
-    const groupColumn = getGroupColumn(groupSource);
 
     const params: unknown[] = [];
-    const where: string[] = [];
-    appendBaseProductFilters(where, params, effectiveBranch, includeInactive);
-    where.push(`NULLIF(${groupColumn}, '') IS NOT NULL`);
+    const where: string[] = ['is_deleted = false', `NULLIF(product_major_code, '') IS NOT NULL`];
+    if (effectiveBranch) {
+      where.push(`branch_id = $${params.push(effectiveBranch)}`);
+    }
 
     const rows = (await sql.unsafe(
-      `SELECT ${groupColumn} AS code,
-              COUNT(DISTINCT item)::int AS item_count
-       FROM public.agility_items
+      `SELECT product_major_code AS code,
+              MAX(COALESCE(NULLIF(product_major, ''), product_major_code)) AS label,
+              COUNT(DISTINCT item_number)::int AS item_count
+       FROM public.customer_scorecard_fact
        WHERE ${where.join(' AND ')}
-       GROUP BY ${groupColumn}
-       ORDER BY ${groupColumn}`,
+       GROUP BY product_major_code
+       ORDER BY MAX(COALESCE(NULLIF(product_major, ''), product_major_code))`,
       params as never[]
-    )) as GroupRow[];
+    )) as MajorRow[];
 
     return NextResponse.json({
-      groups: rows.map((row) => ({
-        code: row.code,
-        label: formatProductLabel(row.code),
-        item_count: row.item_count,
+      groups: rows.map((r) => ({
+        code: r.code,
+        label: formatProductLabel(r.label ?? r.code),
+        item_count: r.item_count,
       })),
-      groupSource,
-      supportsMajor: capabilities.hasMajor,
-      supportsMinor: capabilities.hasMinor,
-      hasPrimarySupplier: capabilities.hasPrimarySupplier,
-      branch: effectiveBranch || null,
+      // Always two browseable levels: major → minor → items
+      supportsMajor: true,
+      supportsMinor: false,
     });
   } catch (err) {
     console.error('[sales/products/groups GET]', err);
