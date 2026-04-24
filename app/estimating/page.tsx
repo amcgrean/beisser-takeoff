@@ -1,21 +1,16 @@
 import { auth } from '../../auth';
 import { redirect } from 'next/navigation';
-import EstimatingHubClient from './EstimatingHubClient';
+import TakeoffApp from '../../src/TakeoffApp';
 
 export const metadata = { title: 'Estimating | LiveEdge' };
 
-export default async function EstimatingPage() {
+interface Props {
+  searchParams: Promise<{ bid?: string }>;
+}
+
+export default async function EstimatingPage({ searchParams }: Props) {
   const session = await auth();
-  if (!session?.user) redirect('/login');
-
-  const isAdmin = session.user.role === 'admin';
-
-  return (
-    <EstimatingHubClient
-      isAdmin={isAdmin}
-      userBranch={session.user.branch ?? null}
-      userName={session.user.name ?? null}
-      userRole={session.user.role ?? 'estimator'}
-    />
-  );
+  if (!session) redirect('/login');
+  const { bid } = await searchParams;
+  return <TakeoffApp session={session} initialBidId={bid} />;
 }
