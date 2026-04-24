@@ -14,6 +14,21 @@ function fmtPct(sales: number, gp: number): string {
   return `${((gp / sales) * 100).toFixed(2)}%`;
 }
 
+function gmPct(sales: number, gp: number): number | null {
+  if (sales === 0) return null;
+  return (gp / sales) * 100;
+}
+
+function gmColor(baseSales: number, baseGp: number, cmpSales: number, cmpGp: number): string {
+  const base = gmPct(baseSales, baseGp);
+  const cmp  = gmPct(cmpSales, cmpGp);
+  if (base === null) return 'text-slate-400';
+  if (cmp === null)  return 'text-slate-300';
+  if (base > cmp + 0.005) return 'text-emerald-400';
+  if (base < cmp - 0.005) return 'text-red-400';
+  return 'text-slate-300';
+}
+
 interface Props {
   rows: SaleTypeRow[];
   baseYear: number;
@@ -52,7 +67,7 @@ export default function SaleTypeTable({ rows, baseYear, compareYear }: Props) {
                 className={`border-b border-slate-800 ${r.isExcluded ? 'bg-amber-950/20' : ''}`}
               >
                 <td className="py-2 text-slate-200 flex items-center gap-2">
-                  <span>{r.category}</span>
+                  <span>{r.isExcluded ? 'Hold' : r.category}</span>
                   {r.isExcluded && (
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/60 text-amber-300 border border-amber-700/50">
                       ⚠ Process Issue
@@ -61,7 +76,7 @@ export default function SaleTypeTable({ rows, baseYear, compareYear }: Props) {
                 </td>
                 <td className="py-2 text-right font-mono tabular-nums text-white pr-3">{fmt$(r.salesBase)}</td>
                 <td className="py-2 text-right font-mono tabular-nums text-white pr-3">{fmt$(r.gpBase)}</td>
-                <td className="py-2 text-right font-mono tabular-nums text-cyan-400 pr-3">{fmtPct(r.salesBase, r.gpBase)}</td>
+                <td className={`py-2 text-right font-mono tabular-nums pr-3 ${gmColor(r.salesBase, r.gpBase, r.salesCompare, r.gpCompare)}`}>{fmtPct(r.salesBase, r.gpBase)}</td>
                 <td className="py-2 text-right font-mono tabular-nums text-slate-400 pr-3">{fmt$(r.salesCompare)}</td>
                 <td className="py-2 text-right font-mono tabular-nums text-slate-400 pr-3">{fmt$(r.gpCompare)}</td>
                 <td className="py-2 text-right font-mono tabular-nums text-slate-400">{fmtPct(r.salesCompare, r.gpCompare)}</td>
@@ -71,7 +86,7 @@ export default function SaleTypeTable({ rows, baseYear, compareYear }: Props) {
               <td className="py-2 text-slate-200">Total</td>
               <td className="py-2 text-right font-mono tabular-nums text-white pr-3">{fmt$(totalBase)}</td>
               <td className="py-2 text-right font-mono tabular-nums text-white pr-3">{fmt$(totalGpBase)}</td>
-              <td className="py-2 text-right font-mono tabular-nums text-cyan-400 pr-3">{fmtPct(totalBase, totalGpBase)}</td>
+              <td className={`py-2 text-right font-mono tabular-nums pr-3 ${gmColor(totalBase, totalGpBase, totalCompare, totalGpCompare)}`}>{fmtPct(totalBase, totalGpBase)}</td>
               <td className="py-2 text-right font-mono tabular-nums text-slate-400 pr-3">{fmt$(totalCompare)}</td>
               <td className="py-2 text-right font-mono tabular-nums text-slate-400 pr-3">{fmt$(totalGpCompare)}</td>
               <td className="py-2 text-right font-mono tabular-nums text-slate-400">{fmtPct(totalCompare, totalGpCompare)}</td>
