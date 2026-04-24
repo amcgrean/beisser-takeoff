@@ -7,7 +7,7 @@ import { signOut, useSession } from 'next-auth/react';
 import {
   LogOut, ChevronDown, Menu, X, Settings,
   Truck, ShoppingCart, FileText, Wrench, PackageCheck, MapPin, Search,
-  Boxes, HelpCircle, User,
+  Boxes, HelpCircle, User, BarChart3,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -210,11 +210,13 @@ function getDomains(tvBranch: string): Domain[] {
       links: [
         { href: '/warehouse',              label: 'Picks Board' },
         { href: '/warehouse/open-picks',   label: 'Open Picks' },
-        { href: '/warehouse/picker-stats', label: 'Picker Stats' },
         { href: '/work-orders',            label: 'Work Orders' },
-        { href: '/supervisor',             label: 'Supervisor',   requireAnyRole: ['supervisor', 'ops', 'warehouse'] },
-        { href: `/tv/${tvBranch}`,         label: 'TV Board',     requireAnyRole: ['supervisor', 'ops', 'warehouse'] },
-        { href: '/warehouse/pickers',      label: 'Picker Admin', requireAnyRole: ['supervisor', 'ops'] },
+        // Performance — picker analytics + supervisor view
+        { href: '/warehouse/picker-stats', label: 'Picker Stats',         sectionBefore: 'Performance' },
+        { href: '/supervisor',             label: 'Supervisor',           requireAnyRole: ['supervisor', 'ops', 'warehouse'] },
+        // Kiosks — TV board + on-floor kiosk
+        { href: `/tv/${tvBranch}`,         label: 'TV Board',             sectionBefore: 'Kiosks', requireAnyRole: ['supervisor', 'ops', 'warehouse'] },
+        { href: `/kiosk/${tvBranch}`,      label: 'Pick Tracker Kiosk',   requireAnyRole: ['supervisor', 'ops', 'warehouse'] },
       ],
     },
     {
@@ -239,19 +241,30 @@ function getDomains(tvBranch: string): Domain[] {
       label: 'Sales',
       icon: <ShoppingCart className="w-4 h-4" />,
       dropdown: true,
-      isActive: (p) => p.startsWith('/sales') || p.startsWith('/credits') || p.startsWith('/scorecard'),
+      isActive: (p) =>
+        (p.startsWith('/sales') && !p.startsWith('/sales/reports')) ||
+        p.startsWith('/credits'),
       links: [
         { href: '/sales',               label: 'Sales Hub' },
         { href: '/sales/customers',     label: 'Customers' },
         { href: '/sales/transactions',  label: 'Transactions' },
         { href: '/sales/history',       label: 'Purchase History' },
         { href: '/sales/products',      label: 'Products & Stock' },
-        { href: '/sales/reports',       label: 'Reports' },
-        { href: '/scorecard',           label: 'Customer Scorecard' },
         { href: '/sales/tracker',       label: 'Sales Tracker',    requireAnyRole: ['sales', 'ops', 'supervisor'] },
         { href: '/sales/deliveries',    label: 'Sales Deliveries', requireAnyRole: ['sales', 'ops', 'supervisor'] },
         { href: '/sales/rep-dashboard', label: 'Rep Dashboard',    requireAnyRole: ['sales'] },
         { href: '/credits',             label: 'RMA Credits' },
+      ],
+    },
+    {
+      id: 'management',
+      label: 'Management',
+      icon: <BarChart3 className="w-4 h-4" />,
+      dropdown: true,
+      isActive: (p) => p.startsWith('/sales/reports') || p.startsWith('/scorecard'),
+      links: [
+        { href: '/sales/reports', label: 'Reports' },
+        { href: '/scorecard',     label: 'Customer Scorecard' },
       ],
     },
     {
@@ -319,6 +332,7 @@ const ADMIN_LINKS: NavLink[] = [
   { href: '/admin/bid-fields',    label: 'Bid Fields',      sectionBefore: 'Services' },
   // Users
   { href: '/admin/users',         label: 'Users',           sectionBefore: 'Users' },
+  { href: '/warehouse/pickers',   label: 'Picker Admin' },
   { href: '/admin/notifications', label: 'Notifications' },
   // Operations
   { href: '/admin/jobs',          label: 'Job Review',      sectionBefore: 'Operations' },
@@ -346,6 +360,8 @@ function canSeeSection(domainId: string, role: string, roles: string[]): boolean
     case 'dispatch':
       return hasAnyRole(roles, 'warehouse', 'sales', 'ops', 'supervisor', 'dispatch');
     case 'sales':
+      return hasAnyRole(roles, 'sales', 'ops', 'supervisor');
+    case 'management':
       return hasAnyRole(roles, 'sales', 'ops', 'supervisor');
     case 'estimating':
       return (role === 'admin' || role === 'estimator') && !isWHUser;
