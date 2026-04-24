@@ -6,6 +6,8 @@ import type {
   KpiSet,
   ProductMajorRow,
   ProductMinorRow,
+  ProductItemRow,
+  ProductOrderRow,
   SaleTypeRow,
   ThreeYearEntry,
   DaysToPayData,
@@ -1384,6 +1386,324 @@ export async function fetchAggregateProductMinors(
     gpBase: toNum(r.gp_base) ?? 0,
     salesCompare: toNum(r.sales_compare) ?? 0,
     gpCompare: toNum(r.gp_compare) ?? 0,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Product item drill-down (on demand, within a major+minor)
+// ---------------------------------------------------------------------------
+
+export async function fetchProductItems(
+  params: ScorecardParams,
+  majorCode: string,
+  minorCode: string,
+): Promise<ProductItemRow[]> {
+  const sql = getErpSql();
+  const { baseCutoff, compareCutoff } = getCutoffs(
+    params.baseYear, params.compareYear, params.cutoffDate, params.period,
+  );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
+
+  type Row = {
+    item_number: string | null;
+    item_description: string | null;
+    qty_base: string | null;
+    sales_base: string | null;
+    gp_base: string | null;
+    qty_compare: string | null;
+    sales_compare: string | null;
+    gp_compare: string | null;
+  };
+
+  const rows = params.branchIds.length > 0
+    ? await sql<Row[]>`
+        SELECT
+          COALESCE(item_number, '') AS item_number,
+          COALESCE(item_description, '') AS item_description,
+          SUM(qty_shipped) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS qty_base,
+          SUM(sales_amount) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS sales_base,
+          SUM(gross_profit) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS gp_base,
+          SUM(qty_shipped) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS qty_compare,
+          SUM(sales_amount) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS sales_compare,
+          SUM(gross_profit) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS gp_compare
+        FROM customer_scorecard_fact
+        WHERE is_deleted = false
+          AND customer_id = ${params.customerId}
+          AND COALESCE(product_major_code, '') = ${majorCode}
+          AND COALESCE(product_minor_code, '') = ${minorCode}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
+          AND branch_id = ANY(${params.branchIds}::text[])
+        GROUP BY item_number, item_description
+        ORDER BY COALESCE(SUM(sales_amount) FILTER (
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+            AND invoice_date::date <= ${baseCutoff}::date
+        ), 0) DESC
+      `
+    : await sql<Row[]>`
+        SELECT
+          COALESCE(item_number, '') AS item_number,
+          COALESCE(item_description, '') AS item_description,
+          SUM(qty_shipped) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS qty_base,
+          SUM(sales_amount) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS sales_base,
+          SUM(gross_profit) FILTER (
+            WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+              AND invoice_date::date <= ${baseCutoff}::date
+          )::text AS gp_base,
+          SUM(qty_shipped) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS qty_compare,
+          SUM(sales_amount) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS sales_compare,
+          SUM(gross_profit) FILTER (
+            WHERE invoice_date >= make_date(${params.compareYear}, 1, 1)
+              AND invoice_date::date <= ${compareCutoff}::date
+          )::text AS gp_compare
+        FROM customer_scorecard_fact
+        WHERE is_deleted = false
+          AND customer_id = ${params.customerId}
+          AND COALESCE(product_major_code, '') = ${majorCode}
+          AND COALESCE(product_minor_code, '') = ${minorCode}
+          AND invoice_date >= ${dateFrom}::timestamp
+          AND invoice_date < ${dateTo}::timestamp
+        GROUP BY item_number, item_description
+        ORDER BY COALESCE(SUM(sales_amount) FILTER (
+          WHERE invoice_date >= make_date(${params.baseYear}, 1, 1)
+            AND invoice_date::date <= ${baseCutoff}::date
+        ), 0) DESC
+      `;
+
+  return rows.map((r) => ({
+    itemNumber: r.item_number ?? '',
+    itemDescription: r.item_description ?? '',
+    qtyBase: toNum(r.qty_base) ?? 0,
+    salesBase: toNum(r.sales_base) ?? 0,
+    gpBase: toNum(r.gp_base) ?? 0,
+    qtyCompare: toNum(r.qty_compare) ?? 0,
+    salesCompare: toNum(r.sales_compare) ?? 0,
+    gpCompare: toNum(r.gp_compare) ?? 0,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Aggregate product item drill-down
+// ---------------------------------------------------------------------------
+
+export async function fetchAggregateProductItems(
+  params: AggregateParams,
+  majorCode: string,
+  minorCode: string,
+): Promise<ProductItemRow[]> {
+  const sql = getErpSql();
+  const { baseCutoff, compareCutoff } = getCutoffs(
+    params.baseYear, params.compareYear, params.cutoffDate, params.period,
+  );
+  const { dateFrom, dateTo } = yearRange(params.baseYear, params.compareYear);
+
+  type Row = {
+    item_number: string | null; item_description: string | null;
+    qty_base: string | null; sales_base: string | null; gp_base: string | null;
+    qty_compare: string | null; sales_compare: string | null; gp_compare: string | null;
+  };
+
+  const baseFilter = sql`invoice_date >= make_date(${params.baseYear}, 1, 1) AND invoice_date::date <= ${baseCutoff}::date`;
+  const compareFilter = sql`invoice_date >= make_date(${params.compareYear}, 1, 1) AND invoice_date::date <= ${compareCutoff}::date`;
+
+  let rows: Row[];
+  if (params.repCode) {
+    const repCol = params.repField ?? 'rep_1';
+    rows = params.branchIds.length > 0
+      ? await sql<Row[]>`
+          SELECT COALESCE(csf.item_number, '') AS item_number,
+            COALESCE(csf.item_description, '') AS item_description,
+            SUM(csf.qty_shipped) FILTER (WHERE csf.${baseFilter})::text AS qty_base,
+            SUM(csf.sales_amount) FILTER (WHERE csf.${baseFilter})::text AS sales_base,
+            SUM(csf.gross_profit) FILTER (WHERE csf.${baseFilter})::text AS gp_base,
+            SUM(csf.qty_shipped) FILTER (WHERE csf.${compareFilter})::text AS qty_compare,
+            SUM(csf.sales_amount) FILTER (WHERE csf.${compareFilter})::text AS sales_compare,
+            SUM(csf.gross_profit) FILTER (WHERE csf.${compareFilter})::text AS gp_compare
+          FROM customer_scorecard_fact csf
+          JOIN agility_so_header soh ON soh.so_id::text = csf.sales_order_number
+          WHERE csf.is_deleted = false
+            AND COALESCE(csf.product_major_code, '') = ${majorCode}
+            AND COALESCE(csf.product_minor_code, '') = ${minorCode}
+            AND csf.invoice_date >= ${dateFrom}::timestamp
+            AND csf.invoice_date < ${dateTo}::timestamp
+            AND soh.${sql(repCol)} = ${params.repCode}
+            AND csf.branch_id = ANY(${params.branchIds}::text[])
+          GROUP BY csf.item_number, csf.item_description
+          ORDER BY COALESCE(SUM(csf.sales_amount) FILTER (WHERE csf.${baseFilter}), 0) DESC
+        `
+      : await sql<Row[]>`
+          SELECT COALESCE(csf.item_number, '') AS item_number,
+            COALESCE(csf.item_description, '') AS item_description,
+            SUM(csf.qty_shipped) FILTER (WHERE csf.${baseFilter})::text AS qty_base,
+            SUM(csf.sales_amount) FILTER (WHERE csf.${baseFilter})::text AS sales_base,
+            SUM(csf.gross_profit) FILTER (WHERE csf.${baseFilter})::text AS gp_base,
+            SUM(csf.qty_shipped) FILTER (WHERE csf.${compareFilter})::text AS qty_compare,
+            SUM(csf.sales_amount) FILTER (WHERE csf.${compareFilter})::text AS sales_compare,
+            SUM(csf.gross_profit) FILTER (WHERE csf.${compareFilter})::text AS gp_compare
+          FROM customer_scorecard_fact csf
+          JOIN agility_so_header soh ON soh.so_id::text = csf.sales_order_number
+          WHERE csf.is_deleted = false
+            AND COALESCE(csf.product_major_code, '') = ${majorCode}
+            AND COALESCE(csf.product_minor_code, '') = ${minorCode}
+            AND csf.invoice_date >= ${dateFrom}::timestamp
+            AND csf.invoice_date < ${dateTo}::timestamp
+            AND soh.${sql(repCol)} = ${params.repCode}
+          GROUP BY csf.item_number, csf.item_description
+          ORDER BY COALESCE(SUM(csf.sales_amount) FILTER (WHERE csf.${baseFilter}), 0) DESC
+        `;
+  } else {
+    rows = params.branchIds.length > 0
+      ? await sql<Row[]>`
+          SELECT COALESCE(item_number, '') AS item_number,
+            COALESCE(item_description, '') AS item_description,
+            SUM(qty_shipped) FILTER (WHERE ${baseFilter})::text AS qty_base,
+            SUM(sales_amount) FILTER (WHERE ${baseFilter})::text AS sales_base,
+            SUM(gross_profit) FILTER (WHERE ${baseFilter})::text AS gp_base,
+            SUM(qty_shipped) FILTER (WHERE ${compareFilter})::text AS qty_compare,
+            SUM(sales_amount) FILTER (WHERE ${compareFilter})::text AS sales_compare,
+            SUM(gross_profit) FILTER (WHERE ${compareFilter})::text AS gp_compare
+          FROM customer_scorecard_fact
+          WHERE is_deleted = false
+            AND COALESCE(product_major_code, '') = ${majorCode}
+            AND COALESCE(product_minor_code, '') = ${minorCode}
+            AND invoice_date >= ${dateFrom}::timestamp
+            AND invoice_date < ${dateTo}::timestamp
+            AND branch_id = ANY(${params.branchIds}::text[])
+          GROUP BY item_number, item_description
+          ORDER BY COALESCE(SUM(sales_amount) FILTER (WHERE ${baseFilter}), 0) DESC
+        `
+      : await sql<Row[]>`
+          SELECT COALESCE(item_number, '') AS item_number,
+            COALESCE(item_description, '') AS item_description,
+            SUM(qty_shipped) FILTER (WHERE ${baseFilter})::text AS qty_base,
+            SUM(sales_amount) FILTER (WHERE ${baseFilter})::text AS sales_base,
+            SUM(gross_profit) FILTER (WHERE ${baseFilter})::text AS gp_base,
+            SUM(qty_shipped) FILTER (WHERE ${compareFilter})::text AS qty_compare,
+            SUM(sales_amount) FILTER (WHERE ${compareFilter})::text AS sales_compare,
+            SUM(gross_profit) FILTER (WHERE ${compareFilter})::text AS gp_compare
+          FROM customer_scorecard_fact
+          WHERE is_deleted = false
+            AND COALESCE(product_major_code, '') = ${majorCode}
+            AND COALESCE(product_minor_code, '') = ${minorCode}
+            AND invoice_date >= ${dateFrom}::timestamp
+            AND invoice_date < ${dateTo}::timestamp
+          GROUP BY item_number, item_description
+          ORDER BY COALESCE(SUM(sales_amount) FILTER (WHERE ${baseFilter}), 0) DESC
+        `;
+  }
+
+  return rows.map((r) => ({
+    itemNumber: r.item_number ?? '',
+    itemDescription: r.item_description ?? '',
+    qtyBase: toNum(r.qty_base) ?? 0,
+    salesBase: toNum(r.sales_base) ?? 0,
+    gpBase: toNum(r.gp_base) ?? 0,
+    qtyCompare: toNum(r.qty_compare) ?? 0,
+    salesCompare: toNum(r.sales_compare) ?? 0,
+    gpCompare: toNum(r.gp_compare) ?? 0,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Product order drill-down (customer scorecard only, base year)
+// ---------------------------------------------------------------------------
+
+export async function fetchProductOrders(
+  params: ScorecardParams,
+  majorCode: string,
+  minorCode: string,
+  itemNumber: string,
+): Promise<ProductOrderRow[]> {
+  const sql = getErpSql();
+  const { baseCutoff } = getCutoffs(
+    params.baseYear, params.compareYear, params.cutoffDate, params.period,
+  );
+
+  type Row = {
+    so_number: string | null;
+    invoice_date: string | null;
+    qty: string | null;
+    sales: string | null;
+    gp: string | null;
+  };
+
+  const rows = params.branchIds.length > 0
+    ? await sql<Row[]>`
+        SELECT
+          COALESCE(sales_order_number, '') AS so_number,
+          MAX(invoice_date::date)::text AS invoice_date,
+          SUM(qty_shipped)::text AS qty,
+          SUM(sales_amount)::text AS sales,
+          SUM(gross_profit)::text AS gp
+        FROM customer_scorecard_fact
+        WHERE is_deleted = false
+          AND customer_id = ${params.customerId}
+          AND COALESCE(product_major_code, '') = ${majorCode}
+          AND COALESCE(product_minor_code, '') = ${minorCode}
+          AND COALESCE(item_number, '') = ${itemNumber}
+          AND invoice_date >= make_date(${params.baseYear}, 1, 1)::timestamp
+          AND invoice_date::date <= ${baseCutoff}::date
+          AND branch_id = ANY(${params.branchIds}::text[])
+        GROUP BY sales_order_number
+        ORDER BY MAX(invoice_date::date) DESC
+        LIMIT 100
+      `
+    : await sql<Row[]>`
+        SELECT
+          COALESCE(sales_order_number, '') AS so_number,
+          MAX(invoice_date::date)::text AS invoice_date,
+          SUM(qty_shipped)::text AS qty,
+          SUM(sales_amount)::text AS sales,
+          SUM(gross_profit)::text AS gp
+        FROM customer_scorecard_fact
+        WHERE is_deleted = false
+          AND customer_id = ${params.customerId}
+          AND COALESCE(product_major_code, '') = ${majorCode}
+          AND COALESCE(product_minor_code, '') = ${minorCode}
+          AND COALESCE(item_number, '') = ${itemNumber}
+          AND invoice_date >= make_date(${params.baseYear}, 1, 1)::timestamp
+          AND invoice_date::date <= ${baseCutoff}::date
+        GROUP BY sales_order_number
+        ORDER BY MAX(invoice_date::date) DESC
+        LIMIT 100
+      `;
+
+  return rows.map((r) => ({
+    soNumber: r.so_number ?? '',
+    invoiceDate: r.invoice_date ?? '',
+    qty: toNum(r.qty) ?? 0,
+    sales: toNum(r.sales) ?? 0,
+    gp: toNum(r.gp) ?? 0,
   }));
 }
 

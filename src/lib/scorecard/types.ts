@@ -48,6 +48,25 @@ export interface ProductMinorRow {
   gpCompare: number;
 }
 
+export interface ProductItemRow {
+  itemNumber: string;
+  itemDescription: string;
+  qtyBase: number;
+  salesBase: number;
+  gpBase: number;
+  qtyCompare: number;
+  salesCompare: number;
+  gpCompare: number;
+}
+
+export interface ProductOrderRow {
+  soNumber: string;
+  invoiceDate: string; // YYYY-MM-DD
+  qty: number;
+  sales: number;
+  gp: number;
+}
+
 export interface SaleTypeRow {
   category: string;
   salesBase: number;
