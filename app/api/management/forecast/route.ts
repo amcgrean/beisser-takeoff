@@ -1,47 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../auth';
 import { getErpSql } from '../../../../db/supabase';
-
-export const BRANCHES = ['10FD', '20GR', '25BW', '40CV'] as const;
-export type Branch = typeof BRANCHES[number];
-
-/** A row in the open-orders pivot: one sale type × four branch counts. */
-export interface OpenOrderRow {
-  sale_type: string;
-  /** Branch code → open SO count */
-  by_branch: Partial<Record<Branch, number>>;
-  total: number;
-}
-
-/** A row in the forecast: one day × per-branch and per-ship-via counts. */
-export interface ForecastDayRow {
-  date: string;
-  total: number;
-  /** Branch code → SO count expected on this day */
-  by_branch: Partial<Record<Branch, number>>;
-  /** Ship via code → SO count expected on this day */
-  by_ship_via: Record<string, number>;
-}
-
-export interface ForecastPayload {
-  branches: readonly Branch[];
-  /** All ship via codes seen in the forecast window, sorted by total volume desc. */
-  ship_vias: string[];
-  /** Open orders matrix — INCLUDES will-calls and direct ships. */
-  open_orders: {
-    rows: OpenOrderRow[];
-    branch_totals: Partial<Record<Branch, number>>;
-    grand_total: number;
-  };
-  /** Forecast — EXCLUDES will-calls and direct ships. */
-  forecast: {
-    days: ForecastDayRow[];
-    branch_totals: Partial<Record<Branch, number>>;
-    ship_via_totals: Record<string, number>;
-    grand_total: number;
-  };
-  forecast_days: number;
-}
+import {
+  BRANCHES,
+  type Branch,
+  type ForecastDayRow,
+  type ForecastPayload,
+  type OpenOrderRow,
+} from '../../../../src/lib/forecast/types';
 
 // GET /api/management/forecast?days=14&branch=
 //

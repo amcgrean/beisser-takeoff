@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Calendar, RefreshCw, ChevronLeft, Truck, Layers, Download, AlertTriangle,
 } from 'lucide-react';
-import type { ForecastPayload, Branch } from '../../api/management/forecast/route';
+import type { ForecastPayload, Branch } from '../../../src/lib/forecast/types';
 import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Props {
