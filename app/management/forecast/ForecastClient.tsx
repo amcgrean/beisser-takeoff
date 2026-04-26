@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Calendar, RefreshCw, ChevronLeft, Truck, Layers, Download, AlertTriangle,
 } from 'lucide-react';
-import type { ForecastPayload, Branch } from '../../api/management/forecast/route';
+import type { ForecastPayload, Branch } from '../../../src/lib/forecast/types';
 import { usePageTracking } from '@/hooks/usePageTracking';
 
 interface Props {
@@ -210,7 +210,9 @@ export default function ForecastClient({ isAdmin, userBranch }: Props) {
           {/* ── Open Orders by Sale Type × Branch ─────────────────────────── */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <SectionTitle>Open Orders by Sale Type · Includes Will-Call &amp; Direct</SectionTitle>
+              <SectionTitle>
+                Open Orders by Sale Type · Includes Will-Call &amp; Direct · Excludes Hold
+              </SectionTitle>
               <button
                 onClick={exportOpen}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition"
@@ -443,9 +445,10 @@ export default function ForecastClient({ isAdmin, userBranch }: Props) {
           {/* ── Footer note ───────────────────────────────────────────────── */}
           <p className="text-xs text-slate-500 flex items-start gap-2">
             <Truck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-600" />
-            Open orders include all sale types — will-calls and direct ships are counted alongside
-            standard deliveries. The forecast intentionally excludes will-calls, direct ships, hold,
-            and install-only orders since none of those produce yard/dispatch shipments.
+            Open orders include will-calls and direct ships alongside standard deliveries.
+            HOLD and install-only orders are excluded since their counts churn as orders move
+            on/off hold and aren't actionable. The forecast also excludes will-calls and direct
+            ships since neither produces a yard/dispatch shipment.
           </p>
         </>
       )}
