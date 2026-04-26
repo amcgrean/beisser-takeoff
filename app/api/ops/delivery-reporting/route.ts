@@ -11,22 +11,34 @@ export interface DeliveryReportRow {
   line_count: number;
 }
 
+/** A (date, branch) cell with the count of distinct SOs shipped that day. */
+export interface DailyBranchCell {
+  date: string;
+  system_id: string;
+  count: number;
+}
+
 export interface DeliveryReportPayload {
   window: string;
   sale_type: string;
-  total: number;
+  /** All ship dates in the window (YYYY-MM-DD), sorted asc — including zero-volume days. */
+  active_dates: string[];
+  /** Per-day total deliveries (across all branches matching the filter). */
   by_date: { date: string; count: number }[];
+  /** Per-day per-branch deliveries — used to compute daily avg/high/low per branch. */
+  by_date_branch: DailyBranchCell[];
   by_sale_type: { sale_type: string; count: number }[];
-  by_ship_via: { ship_via: string; count: number }[];
+  by_ship_via:  { ship_via: string;  count: number }[];
   detail: DeliveryReportRow[];
 }
 
 // GET /api/ops/delivery-reporting?sale_type=all&window=30d&branch=
 //
-// Fulfilled deliveries (excludes will-calls and direct ships) over a rolling
-// window. All summaries + detail are pulled in a single round-trip via CTEs +
-// json_build_object so the page can hydrate from one network call instead of
-// four parallel ones.
+// Fulfilled deliveries (excludes will-calls, directs, install-only, hold) over
+// a rolling window. Returns per-day-per-branch counts so the client can compute
+// daily averages, highs, and lows — the metrics ops actually cares about.
+// Saturday inclusion is a client-side toggle since most metrics differ
+// dramatically when Saturdays are mixed in (low-volume delivery days).
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -52,16 +64,14 @@ export async function GET(req: NextRequest) {
 
     type ResultRow = {
       result: {
-        by_date:      { date: string; count: number }[]      | null;
-        by_sale_type: { sale_type: string; count: number }[] | null;
-        by_ship_via:  { ship_via: string; count: number }[]  | null;
-        detail:       DeliveryReportRow[]                    | null;
+        by_date:        { date: string; count: number }[]            | null;
+        by_date_branch: DailyBranchCell[]                            | null;
+        by_sale_type:   { sale_type: string; count: number }[]       | null;
+        by_ship_via:    { ship_via: string;  count: number }[]       | null;
+        detail:         DeliveryReportRow[]                          | null;
       };
     };
 
-    // Single CTE-based query: filter once, aggregate four ways, plus a detail
-    // window. Counts use COUNT(DISTINCT so_id) so a single SO with multiple
-    // shipment rows isn't double-counted in the date/type/via summaries.
     const rows = await sql<ResultRow[]>`
       WITH filtered AS (
         SELECT
@@ -106,6 +116,13 @@ export async function GET(req: NextRequest) {
             FROM uniq GROUP BY ship_date
           ) d
         ),
+        'by_date_branch', (
+          SELECT COALESCE(json_agg(d ORDER BY d.date ASC, d.system_id ASC), '[]'::json)
+          FROM (
+            SELECT ship_date::text AS date, system_id, COUNT(*)::int AS count
+            FROM uniq GROUP BY ship_date, system_id
+          ) d
+        ),
         'by_sale_type', (
           SELECT COALESCE(json_agg(s ORDER BY s.count DESC), '[]'::json)
           FROM (
@@ -135,15 +152,17 @@ export async function GET(req: NextRequest) {
       ) AS result
     `;
 
-    const r = rows[0]?.result ?? { by_date: [], by_sale_type: [], by_ship_via: [], detail: [] };
+    const r = rows[0]?.result ?? {
+      by_date: [], by_date_branch: [], by_sale_type: [], by_ship_via: [], detail: [],
+    };
     const byDate = r.by_date ?? [];
-    const total = byDate.reduce((sum, d) => sum + d.count, 0);
 
     const payload: DeliveryReportPayload = {
       window: windowParam,
       sale_type: saleTypeParam,
-      total,
+      active_dates: byDate.map((d) => d.date),
       by_date: byDate,
+      by_date_branch: r.by_date_branch ?? [],
       by_sale_type: r.by_sale_type ?? [],
       by_ship_via: r.by_ship_via ?? [],
       detail: r.detail ?? [],

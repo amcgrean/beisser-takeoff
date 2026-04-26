@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
         FROM agility_so_header
         WHERE is_deleted = false
           AND UPPER(COALESCE(so_status, '')) NOT IN ('I', 'C', 'X')
+          AND UPPER(COALESCE(sale_type, '')) NOT IN ('HOLD', 'XINSTALL')
           ${branch ? sql`AND system_id = ${branch}` : sql``}
         GROUP BY COALESCE(NULLIF(TRIM(sale_type), ''), 'UNKNOWN'), system_id
       `,
