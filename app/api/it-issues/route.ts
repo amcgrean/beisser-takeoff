@@ -56,11 +56,13 @@ export async function POST(req: NextRequest) {
       createdby: session.user.name ?? 'Unknown',
       status: 'Open',
       notes: (body.notes as string) ?? null,
+      sourcePage: (body.sourcePage as string) ?? null,
     }).returning();
 
     const apiKey = process.env.RESEND_API_KEY;
     if (apiKey) {
       const notes = (body.notes as string) ?? '';
+      const sourcePage = (body.sourcePage as string) ?? '';
       fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -71,9 +73,10 @@ export async function POST(req: NextRequest) {
           html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
             <h2 style="color:#004526">New IT Issue Reported</h2>
             <table style="border-collapse:collapse;width:100%">
-              <tr><td style="padding:6px 0;color:#555;width:110px">Issue #</td><td style="padding:6px 0;font-weight:bold">${issue.id}</td></tr>
+              <tr><td style="padding:6px 0;color:#555;width:120px">Issue #</td><td style="padding:6px 0;font-weight:bold">${issue.id}</td></tr>
               <tr><td style="padding:6px 0;color:#555">Type</td><td style="padding:6px 0">${issueType}</td></tr>
               <tr><td style="padding:6px 0;color:#555">Reported by</td><td style="padding:6px 0">${session.user.name}</td></tr>
+              ${sourcePage ? `<tr><td style="padding:6px 0;color:#555">Reported from</td><td style="padding:6px 0;font-family:monospace;font-size:0.9em">${sourcePage}</td></tr>` : ''}
               <tr><td style="padding:6px 0;color:#555;vertical-align:top">Description</td><td style="padding:6px 0">${description}</td></tr>
               ${notes ? `<tr><td style="padding:6px 0;color:#555;vertical-align:top">Notes</td><td style="padding:6px 0">${notes}</td></tr>` : ''}
             </table>

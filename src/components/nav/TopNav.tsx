@@ -601,7 +601,7 @@ export function TopNav({ userName, userRole }: Props) {
                     <p className="text-sm font-semibold text-white truncate mt-0.5">{name}</p>
                   </div>
                   <Link
-                    href="/it-issues"
+                    href={`/it-issues?report=1&from=${encodeURIComponent(pathname)}`}
                     onClick={() => setOpenMenu(null)}
                     className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition"
                   >
@@ -789,7 +789,7 @@ export function TopNav({ userName, userRole }: Props) {
                   Account — {name}
                 </div>
                 <Link
-                  href="/it-issues"
+                  href={`/it-issues?report=1&from=${encodeURIComponent(pathname)}`}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition"
                 >
                   <Wrench className="w-4 h-4" />
