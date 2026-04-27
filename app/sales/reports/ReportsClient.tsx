@@ -389,8 +389,13 @@ export default function ReportsClient({ isAdmin, userBranch }: Props) {
                     <span className="ml-auto text-xs text-slate-500">Open → Invoiced</span>
                   </div>
                   <StatusFunnelBar
-                    counts={Object.fromEntries(
-                      data.status_breakdown.map((s) => [s.so_status, s.cnt]),
+                    counts={data.status_breakdown.reduce<Record<string, number>>(
+                      (acc, s) => {
+                        const key = s.so_status?.trim() ? s.so_status : 'B';
+                        acc[key] = (acc[key] ?? 0) + s.cnt;
+                        return acc;
+                      },
+                      {},
                     )}
                     height={48}
                   />
