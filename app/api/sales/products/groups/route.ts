@@ -1,8 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { getErpSql } from '../../../../../db/supabase';
 import { getSelectedBranchCode } from '@/lib/branch-context';
-import { formatProductLabel, isProductAdmin } from '../_shared';
+import {
+  appendItemFilters,
+  formatProductLabel,
+  isProductAdmin,
+  parseIncludeInactive,
+} from '../_shared';
 
 type MajorRow = {
   code: string;
@@ -11,13 +16,14 @@ type MajorRow = {
 };
 
 // GET /api/sales/products/groups
-// Returns distinct product majors from customer_scorecard_fact, scoped to the
-// branch selected in the nav (beisser-branch cookie) for admins.
-export async function GET() {
+// Returns distinct product majors from agility_items, branch-scoped via the
+// nav cookie (beisser-branch) for admins.
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const isAdmin = isProductAdmin(session.user);
+  const includeInactive = isAdmin && parseIncludeInactive(req.nextUrl.searchParams.get('includeInactive'));
   const effectiveBranch = isAdmin
     ? (await getSelectedBranchCode() ?? '')
     : (session.user.branch ?? '');
@@ -26,16 +32,15 @@ export async function GET() {
     const sql = getErpSql();
 
     const params: unknown[] = [];
-    const where: string[] = ['is_deleted = false', `NULLIF(product_major_code, '') IS NOT NULL`];
-    if (effectiveBranch) {
-      where.push(`branch_id = $${params.push(effectiveBranch)}`);
-    }
+    const where: string[] = [];
+    appendItemFilters(where, params, effectiveBranch, includeInactive);
+    where.push(`NULLIF(product_major_code, '') IS NOT NULL`);
 
     const rows = (await sql.unsafe(
       `SELECT product_major_code AS code,
               MAX(COALESCE(NULLIF(product_major, ''), product_major_code)) AS label,
-              COUNT(DISTINCT item_number)::int AS item_count
-       FROM public.customer_scorecard_fact
+              COUNT(DISTINCT item)::int AS item_count
+       FROM public.agility_items
        WHERE ${where.join(' AND ')}
        GROUP BY product_major_code
        ORDER BY MAX(COALESCE(NULLIF(product_major, ''), product_major_code))`,
@@ -48,7 +53,6 @@ export async function GET() {
         label: formatProductLabel(r.label ?? r.code),
         item_count: r.item_count,
       })),
-      // Always two browseable levels: major → minor → items
       supportsMajor: true,
       supportsMinor: false,
     });

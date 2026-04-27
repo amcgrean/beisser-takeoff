@@ -68,16 +68,11 @@ export async function GET(req: NextRequest) {
     const baseWhere: string[] = [];
     appendItemFilters(baseWhere, baseParams, effectiveBranch, includeInactive);
 
-    // When browsing by major (and optionally minor), scope via scorecard subquery.
-    // Values come from auth session / nav cookie so literal interpolation is safe.
     if (majorCode) {
-      const esc = (s: string) => s.replace(/'/g, "''");
-      const minorClause = minorCode ? ` AND product_minor_code = '${esc(minorCode)}'` : '';
-      const branchClause = effectiveBranch ? ` AND branch_id = '${esc(effectiveBranch)}'` : '';
-      baseWhere.push(
-        `item IN (SELECT DISTINCT item_number FROM public.customer_scorecard_fact` +
-        ` WHERE is_deleted = false AND product_major_code = '${esc(majorCode)}'${minorClause}${branchClause})`
-      );
+      baseWhere.push(`product_major_code = ${addParam(baseParams, majorCode)}`);
+    }
+    if (minorCode) {
+      baseWhere.push(`product_minor_code = ${addParam(baseParams, minorCode)}`);
     }
 
     const runQuery = async (mode: SearchMode) => {
