@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  Truck, RefreshCw, BarChart2, ChevronLeft, Download, Activity, Building2, Layers,
+  Truck, RefreshCw, BarChart2, ChevronLeft, ChevronRight, Download,
+  Activity, Building2, Layers, Calendar, ExternalLink,
 } from 'lucide-react';
 import type {
   DeliveryReportPayload, DeliveryReportRow,
@@ -51,6 +52,12 @@ function isSaturday(date: string): boolean {
 
 function fmtDay(s: string): string {
   return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtDayFull(s: string): string {
+  return new Date(s + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -117,11 +124,17 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Drill-down state
+  const [drillBranch, setDrillBranch] = useState<string | null>(null);
+  const [drillDate, setDrillDate] = useState<string | null>(null);
+  const [dayOrders, setDayOrders] = useState<DeliveryReportRow[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const params = new URLSearchParams({ window: windowParam, sale_type: saleType, detail_limit: '500' });
+      const params = new URLSearchParams({ window: windowParam, sale_type: saleType, detail_limit: '1000' });
       if (branch) params.set('branch', branch);
       const res = await fetch(`/api/ops/delivery-reporting?${params}`);
       if (!res.ok) throw new Error(`${res.status}`);
@@ -134,6 +147,33 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
   }, [windowParam, saleType, branch]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset drill state when filters change
+  useEffect(() => {
+    setDrillBranch(null);
+    setDrillDate(null);
+  }, [windowParam, saleType, branch]);
+
+  const loadDayOrders = useCallback(async (b: string, date: string) => {
+    setDayLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({
+        window: windowParam,
+        branch: b,
+        date,
+        detail_limit: '1000',
+      });
+      const res = await fetch(`/api/ops/delivery-reporting?${params}`);
+      if (!res.ok) throw new Error(`${res.status}`);
+      const payload = await res.json() as DeliveryReportPayload;
+      setDayOrders(payload.detail);
+    } catch (e) {
+      setError(`Failed to load orders. ${e instanceof Error ? e.message : ''}`);
+    } finally {
+      setDayLoading(false);
+    }
+  }, [windowParam]);
 
   // Apply Saturday filter to overall daily series → daily avg / high / low
   const filteredByDate = useMemo(() => {
@@ -171,11 +211,32 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
     return out;
   }, [data, includeSaturdays]);
 
+  // Per-day rows for the selected branch (complete — sourced from by_date_branch)
+  const branchDailyRows = useMemo(() => {
+    if (!drillBranch || !data) return [] as { date: string; count: number }[];
+    const dayMap = new Map<string, number>();
+    for (const cell of data.by_date_branch) {
+      if (cell.system_id !== drillBranch) continue;
+      if (!includeSaturdays && isSaturday(cell.date)) continue;
+      dayMap.set(cell.date, (dayMap.get(cell.date) ?? 0) + cell.count);
+    }
+    return Array.from(dayMap, ([date, count]) => ({ date, count }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [drillBranch, data, includeSaturdays]);
+
+  const branchStats = useMemo(() => {
+    if (!drillBranch) return null;
+    return perBranch.find((b) => b.branch === drillBranch) ?? null;
+  }, [drillBranch, perBranch]);
+
+  const maxBranchDayCount = useMemo(
+    () => branchDailyRows.reduce((m, r) => Math.max(m, r.count), 0),
+    [branchDailyRows],
+  );
+
   const shipTotal = data?.by_ship_via.reduce((s, d) => s + d.count, 0) ?? 0;
 
-  // Stacked-by-branch time series — pivot by_date_branch into one row per date with
-  // a numeric column per branch. Branches with at least one delivery in the window
-  // become series; Saturday filtering is applied client-side.
+  // Stacked-by-branch time series
   const { stackedByDate, branchSeries } = useMemo(() => {
     if (!data) return { stackedByDate: [], branchSeries: [] };
     const branches = Array.from(
@@ -204,7 +265,7 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
     return { stackedByDate: stacked, branchSeries: series };
   }, [data, includeSaturdays]);
 
-  // Sale Type × Branch heatmap — pivot from the new by_sale_type_branch aggregate.
+  // Sale Type × Branch heatmap
   const { saleTypeRows, saleTypeBranchCols, saleTypeBranchValues } = useMemo(() => {
     const rows = data?.by_sale_type.map((s) => s.sale_type) ?? [];
     const colSet = new Set<string>();
@@ -224,6 +285,28 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
   const branchLabel = BRANCH_OPTIONS.find((b) => b.value === branch)?.label ?? 'All Branches';
 
   const fmtAvg = (n: number) => (n === 0 ? '0' : n.toFixed(1));
+
+  const handleBranchClick = (b: string) => {
+    setDrillBranch(b);
+    setDrillDate(null);
+  };
+
+  const handleDateClick = (date: string) => {
+    if (!drillBranch) return;
+    setDrillDate(date);
+    loadDayOrders(drillBranch, date);
+  };
+
+  const handleBackToBranch = () => {
+    setDrillDate(null);
+    setDayOrders([]);
+  };
+
+  const handleBackToMain = () => {
+    setDrillBranch(null);
+    setDrillDate(null);
+    setDayOrders([]);
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-7xl mx-auto">
@@ -337,254 +420,513 @@ export default function DeliveryReportingClient({ isAdmin, userBranch }: Props) 
 
       {data && (
         <>
-          {/* Daily KPI bank — avg / high / low (no rolling totals) */}
-          <div>
-            <SectionTitle>
-              Daily Cadence · Last {windowParam} · {overallStats.days} active day
-              {overallStats.days === 1 ? '' : 's'}
-            </SectionTitle>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <KpiTile
-                label="Daily Avg"
-                value={fmtAvg(overallStats.avg)}
-                sub={`across ${overallStats.days} day${overallStats.days === 1 ? '' : 's'}`}
-              />
-              <KpiTile
-                label="Daily High"
-                value={overallStats.high.toLocaleString()}
-                sub={overallStats.highDate ? fmtDay(overallStats.highDate) : undefined}
-              />
-              <KpiTile
-                label="Daily Low"
-                value={overallStats.low.toLocaleString()}
-                sub={overallStats.lowDate ? fmtDay(overallStats.lowDate) : undefined}
-              />
-            </div>
-          </div>
-
-          {/* Per-branch breakdown */}
-          {perBranch.length > 0 && (
-            <div>
-              <SectionTitle>By Branch · Daily Avg / High / Low</SectionTitle>
-              <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-700 bg-slate-900/40">
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5 text-slate-500" /> Branch
-                        </div>
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
-                        Daily Avg
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
-                        Daily High
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
-                        Daily Low
-                      </th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 pr-4">
-                        Active Days
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {perBranch.map((b) => (
-                      <tr key={b.branch} className="border-b border-slate-800 hover:bg-slate-800/40 transition">
-                        <td className="px-4 py-2.5">
-                          <span className={`font-semibold ${BRANCH_COLOR[b.branch] ?? 'text-white'}`}>
-                            {BRANCH_LABEL[b.branch] ?? b.branch}
-                          </span>
-                          <span className="text-slate-600 text-xs ml-2 font-mono">{b.branch}</span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-white">
-                          {fmtAvg(b.avg)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono tabular-nums text-emerald-300">
-                          {b.high.toLocaleString()}
-                          {b.highDate && (
-                            <span className="text-[10px] text-slate-600 ml-1.5">
-                              {fmtDay(b.highDate)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono tabular-nums text-amber-300">
-                          {b.low.toLocaleString()}
-                          {b.lowDate && (
-                            <span className="text-[10px] text-slate-600 ml-1.5">
-                              {fmtDay(b.lowDate)}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500 pr-4">
-                          {b.days}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Daily stacked-by-branch chart */}
-          {data.by_date.length > 0 && (
-            <div>
-              <SectionTitle>Deliveries by Day</SectionTitle>
-              <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-slate-500">{stackedByDate.length} days</span>
-                  <span className="text-xs text-slate-500">
-                    avg{' '}
-                    <span className="text-white font-semibold tabular-nums">
-                      {fmtAvg(overallStats.avg)}
-                    </span>
-                    {' '}· high{' '}
-                    <span className="text-emerald-300 font-semibold tabular-nums">
-                      {overallStats.high}
-                    </span>
-                    {' '}· low{' '}
-                    <span className="text-amber-300 font-semibold tabular-nums">
-                      {overallStats.low}
-                    </span>
-                    {!includeSaturdays && ' · Sat excluded'}
-                  </span>
-                </div>
-                <TimeSeriesChart
-                  data={stackedByDate}
-                  series={branchSeries}
-                  stacked
-                  brush={windowParam === '90d'}
-                  height={260}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Sale Type × Branch heatmap */}
-          {saleTypeRows.length > 0 && saleTypeBranchCols.length > 0 && (
-            <div>
-              <SectionTitle>Sale Type × Branch</SectionTitle>
-              <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
-                <div className="flex items-center gap-2 mb-3">
-                  <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span className="text-sm font-semibold text-white">Mix by Branch</span>
-                  <span className="ml-auto text-xs text-slate-500">
-                    cell intensity scales with delivery count
-                  </span>
-                </div>
-                <HeatmapGrid
-                  rows={saleTypeRows}
-                  cols={saleTypeBranchCols}
-                  colLabels={BRANCH_LABEL}
-                  values={saleTypeBranchValues}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Ship Via mix donut */}
-          {data.by_ship_via.length > 0 && (
-            <div>
-              <SectionTitle>By Ship Via</SectionTitle>
-              <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
-                <div className="flex items-center gap-2 mb-4">
-                  <Activity className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span className="text-sm font-semibold text-white">Carrier Mix</span>
-                  <span className="ml-auto text-xs text-slate-500 tabular-nums">
-                    {shipTotal.toLocaleString()} total
-                  </span>
-                </div>
-                <MixDonut
-                  rows={data.by_ship_via.map((s) => ({ label: s.ship_via, value: s.count }))}
-                  centerLabel="Deliveries"
-                  height={260}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Detail table */}
-          <div>
-            <SectionTitle>Detail</SectionTitle>
-            <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span className="text-sm font-semibold text-white">Shipped Orders</span>
-                <span className="ml-auto text-xs text-slate-500">
-                  {data.detail.length}{data.detail.length >= 500 ? '+' : ''} rows · {windowParam}
-                  {saleType !== 'all' ? ` · ${saleType}` : ''}
-                </span>
-              </div>
-
-              {data.detail.length === 0 ? (
-                <p className="text-slate-500 text-sm text-center py-10">
-                  No delivery data found for this period.
-                </p>
+          {/* Breadcrumb when drilling */}
+          {drillBranch && (
+            <div className="flex items-center gap-1.5 text-sm flex-wrap">
+              <button
+                onClick={handleBackToMain}
+                className="text-slate-400 hover:text-cyan-400 transition"
+              >
+                All Branches
+              </button>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+              {drillDate ? (
+                <button
+                  onClick={handleBackToBranch}
+                  className={`font-medium hover:text-cyan-400 transition ${BRANCH_COLOR[drillBranch] ?? 'text-white'}`}
+                >
+                  {BRANCH_LABEL[drillBranch] ?? drillBranch}
+                </button>
               ) : (
-                <div className="overflow-x-auto max-h-[32rem] overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-slate-900">
-                      <tr className="border-b border-slate-700">
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400 whitespace-nowrap">
-                          Ship Date
-                        </th>
-                        {isAdmin && (
-                          <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
-                            Branch
-                          </th>
-                        )}
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
-                          SO #
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
-                          Sale Type
-                        </th>
-                        <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
-                          Ship Via
-                        </th>
-                        <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400 pr-4">
-                          Lines
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.detail.map((r, i) => (
-                        <tr
-                          key={i}
-                          className="border-b border-slate-800 hover:bg-slate-800/40 transition"
-                        >
-                          <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap tabular-nums">
-                            {r.ship_date}
-                            {isSaturday(r.ship_date) && (
-                              <span className="text-[10px] text-slate-600 ml-1.5">Sat</span>
-                            )}
-                          </td>
-                          {isAdmin && (
-                            <td className="px-4 py-2.5 text-xs text-slate-500">{r.system_id}</td>
-                          )}
-                          <td className="px-4 py-2.5">
-                            <Link
-                              href={`/sales/orders/${r.so_id}`}
-                              className="font-mono text-cyan-400 hover:text-cyan-300 text-xs transition"
-                            >
-                              {r.so_id}
-                            </Link>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">{r.sale_type ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400">{r.ship_via ?? '—'}</td>
-                          <td className="px-4 py-2.5 text-right text-xs font-mono tabular-nums text-slate-300 pr-4">
-                            {r.line_count}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <span className={`font-medium ${BRANCH_COLOR[drillBranch] ?? 'text-white'}`}>
+                  {BRANCH_LABEL[drillBranch] ?? drillBranch}
+                </span>
+              )}
+              {drillDate && (
+                <>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                  <span className="text-white font-medium">{fmtDayFull(drillDate)}</span>
+                </>
               )}
             </div>
-          </div>
+          )}
+
+          {/* ── Day detail view ─────────────────────────────────────────── */}
+          {drillBranch && drillDate && (
+            <div className="space-y-4">
+              <div>
+                <SectionTitle>Orders Shipped · {fmtDayFull(drillDate)}</SectionTitle>
+                <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="text-sm font-semibold text-white">
+                      {BRANCH_LABEL[drillBranch] ?? drillBranch} · {fmtDay(drillDate)}
+                    </span>
+                    {dayLoading && (
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin ml-1" />
+                    )}
+                    <span className="ml-auto text-xs text-slate-500">
+                      {dayOrders.length} order{dayOrders.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  {dayLoading && dayOrders.length === 0 ? (
+                    <div className="flex items-center justify-center py-12 text-slate-500 text-sm">
+                      <RefreshCw className="w-4 h-4 animate-spin mr-2" />
+                      Loading orders…
+                    </div>
+                  ) : dayOrders.length === 0 ? (
+                    <p className="text-slate-500 text-sm text-center py-10">
+                      No orders found for this date.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700 bg-slate-900/40">
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              SO #
+                            </th>
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Sale Type
+                            </th>
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Ship Via
+                            </th>
+                            <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400 pr-4">
+                              Lines
+                            </th>
+                            <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400 pr-4">
+                              Detail
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dayOrders.map((r, i) => (
+                            <tr
+                              key={i}
+                              className="border-b border-slate-800 hover:bg-slate-800/40 transition"
+                            >
+                              <td className="px-4 py-2.5">
+                                <Link
+                                  href={`/sales/orders/${r.so_id}`}
+                                  className="font-mono text-cyan-400 hover:text-cyan-300 text-xs font-semibold transition"
+                                >
+                                  {r.so_id}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-slate-400">
+                                {r.sale_type ?? '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-slate-400">
+                                {r.ship_via ?? '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-xs font-mono tabular-nums text-slate-300 pr-4">
+                                {r.line_count}
+                              </td>
+                              <td className="px-4 py-2.5 text-right pr-4">
+                                <Link
+                                  href={`/sales/orders/${r.so_id}`}
+                                  className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400 transition"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  View
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Branch daily view ────────────────────────────────────────── */}
+          {drillBranch && !drillDate && (
+            <div className="space-y-5">
+              {/* Branch KPIs */}
+              {branchStats && (
+                <div>
+                  <SectionTitle>
+                    {BRANCH_LABEL[drillBranch] ?? drillBranch} · Last {windowParam} · {branchStats.days} active day
+                    {branchStats.days === 1 ? '' : 's'}
+                  </SectionTitle>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <KpiTile label="Total Shipped" value={branchStats.total.toLocaleString()} />
+                    <KpiTile
+                      label="Daily Avg"
+                      value={fmtAvg(branchStats.avg)}
+                      sub={`across ${branchStats.days} day${branchStats.days === 1 ? '' : 's'}`}
+                    />
+                    <KpiTile
+                      label="Daily High"
+                      value={branchStats.high.toLocaleString()}
+                      sub={branchStats.highDate ? fmtDay(branchStats.highDate) : undefined}
+                    />
+                    <KpiTile
+                      label="Daily Low"
+                      value={branchStats.low.toLocaleString()}
+                      sub={branchStats.lowDate ? fmtDay(branchStats.lowDate) : undefined}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Daily totals table — click a row to see orders */}
+              <div>
+                <SectionTitle>Daily Deliveries · Click a day to view orders</SectionTitle>
+                <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className={`text-sm font-semibold ${BRANCH_COLOR[drillBranch] ?? 'text-white'}`}>
+                      {BRANCH_LABEL[drillBranch] ?? drillBranch}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono ml-1">{drillBranch}</span>
+                    <span className="ml-auto text-xs text-slate-500">
+                      {branchDailyRows.length} day{branchDailyRows.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  {branchDailyRows.length === 0 ? (
+                    <p className="text-slate-500 text-sm text-center py-10">
+                      No delivery data for this branch in this period.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700 bg-slate-900/40">
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Date
+                            </th>
+                            <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
+                              Orders
+                            </th>
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Volume
+                            </th>
+                            <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400 pr-4">
+                              &nbsp;
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {branchDailyRows.map((r) => {
+                            const pct = maxBranchDayCount > 0
+                              ? Math.round((r.count / maxBranchDayCount) * 100)
+                              : 0;
+                            return (
+                              <tr
+                                key={r.date}
+                                onClick={() => handleDateClick(r.date)}
+                                className="border-b border-slate-800 hover:bg-slate-700/40 transition cursor-pointer group"
+                              >
+                                <td className="px-4 py-2.5">
+                                  <span className="text-white text-xs font-medium group-hover:text-cyan-300 transition">
+                                    {fmtDayFull(r.date)}
+                                  </span>
+                                  {isSaturday(r.date) && (
+                                    <span className="text-[10px] text-slate-600 ml-1.5">Sat</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-white">
+                                  {r.count}
+                                </td>
+                                <td className="px-4 py-2.5 w-40">
+                                  <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-cyan-600 group-hover:bg-cyan-500 transition-colors"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-2.5 text-right pr-4">
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-cyan-400 inline transition" />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Main overview ─────────────────────────────────────────────── */}
+          {!drillBranch && (
+            <>
+              {/* Daily KPI bank — avg / high / low (no rolling totals) */}
+              <div>
+                <SectionTitle>
+                  Daily Cadence · Last {windowParam} · {overallStats.days} active day
+                  {overallStats.days === 1 ? '' : 's'}
+                </SectionTitle>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <KpiTile
+                    label="Daily Avg"
+                    value={fmtAvg(overallStats.avg)}
+                    sub={`across ${overallStats.days} day${overallStats.days === 1 ? '' : 's'}`}
+                  />
+                  <KpiTile
+                    label="Daily High"
+                    value={overallStats.high.toLocaleString()}
+                    sub={overallStats.highDate ? fmtDay(overallStats.highDate) : undefined}
+                  />
+                  <KpiTile
+                    label="Daily Low"
+                    value={overallStats.low.toLocaleString()}
+                    sub={overallStats.lowDate ? fmtDay(overallStats.lowDate) : undefined}
+                  />
+                </div>
+              </div>
+
+              {/* Per-branch breakdown — click a row to drill in */}
+              {perBranch.length > 0 && (
+                <div>
+                  <SectionTitle>By Branch · Click to drill down</SectionTitle>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-700 bg-slate-900/40">
+                          <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="w-3.5 h-3.5 text-slate-500" /> Branch
+                            </div>
+                          </th>
+                          <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
+                            Daily Avg
+                          </th>
+                          <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
+                            Daily High
+                          </th>
+                          <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400">
+                            Daily Low
+                          </th>
+                          <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 pr-4">
+                            Active Days
+                          </th>
+                          <th className="px-1 py-2.5 pr-4" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {perBranch.map((b) => (
+                          <tr
+                            key={b.branch}
+                            onClick={() => handleBranchClick(b.branch)}
+                            className="border-b border-slate-800 hover:bg-slate-700/40 transition cursor-pointer group"
+                          >
+                            <td className="px-4 py-2.5">
+                              <span className={`font-semibold group-hover:underline ${BRANCH_COLOR[b.branch] ?? 'text-white'}`}>
+                                {BRANCH_LABEL[b.branch] ?? b.branch}
+                              </span>
+                              <span className="text-slate-600 text-xs ml-2 font-mono">{b.branch}</span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono tabular-nums font-semibold text-white">
+                              {fmtAvg(b.avg)}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono tabular-nums text-emerald-300">
+                              {b.high.toLocaleString()}
+                              {b.highDate && (
+                                <span className="text-[10px] text-slate-600 ml-1.5">
+                                  {fmtDay(b.highDate)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono tabular-nums text-amber-300">
+                              {b.low.toLocaleString()}
+                              {b.lowDate && (
+                                <span className="text-[10px] text-slate-600 ml-1.5">
+                                  {fmtDay(b.lowDate)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-500 pr-4">
+                              {b.days}
+                            </td>
+                            <td className="px-1 py-2.5 pr-4 text-right">
+                              <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-cyan-400 inline transition" />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Daily stacked-by-branch chart */}
+              {data.by_date.length > 0 && (
+                <div>
+                  <SectionTitle>Deliveries by Day</SectionTitle>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-slate-500">{stackedByDate.length} days</span>
+                      <span className="text-xs text-slate-500">
+                        avg{' '}
+                        <span className="text-white font-semibold tabular-nums">
+                          {fmtAvg(overallStats.avg)}
+                        </span>
+                        {' '}· high{' '}
+                        <span className="text-emerald-300 font-semibold tabular-nums">
+                          {overallStats.high}
+                        </span>
+                        {' '}· low{' '}
+                        <span className="text-amber-300 font-semibold tabular-nums">
+                          {overallStats.low}
+                        </span>
+                        {!includeSaturdays && ' · Sat excluded'}
+                      </span>
+                    </div>
+                    <TimeSeriesChart
+                      data={stackedByDate}
+                      series={branchSeries}
+                      stacked
+                      brush={windowParam === '90d'}
+                      height={260}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Sale Type × Branch heatmap */}
+              {saleTypeRows.length > 0 && saleTypeBranchCols.length > 0 && (
+                <div>
+                  <SectionTitle>Sale Type × Branch</SectionTitle>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Layers className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="text-sm font-semibold text-white">Mix by Branch</span>
+                      <span className="ml-auto text-xs text-slate-500">
+                        cell intensity scales with delivery count
+                      </span>
+                    </div>
+                    <HeatmapGrid
+                      rows={saleTypeRows}
+                      cols={saleTypeBranchCols}
+                      colLabels={BRANCH_LABEL}
+                      values={saleTypeBranchValues}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Ship Via mix donut */}
+              {data.by_ship_via.length > 0 && (
+                <div>
+                  <SectionTitle>By Ship Via</SectionTitle>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 print:break-inside-avoid">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity className="w-4 h-4 text-purple-400 shrink-0" />
+                      <span className="text-sm font-semibold text-white">Carrier Mix</span>
+                      <span className="ml-auto text-xs text-slate-500 tabular-nums">
+                        {shipTotal.toLocaleString()} total
+                      </span>
+                    </div>
+                    <MixDonut
+                      rows={data.by_ship_via.map((s) => ({ label: s.ship_via, value: s.count }))}
+                      centerLabel="Deliveries"
+                      height={260}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Detail table */}
+              <div>
+                <SectionTitle>Detail</SectionTitle>
+                <div className="bg-slate-800/60 border border-slate-700 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="text-sm font-semibold text-white">Shipped Orders</span>
+                    <span className="ml-auto text-xs text-slate-500">
+                      {data.detail.length}{data.detail.length >= 1000 ? '+' : ''} rows · {windowParam}
+                      {saleType !== 'all' ? ` · ${saleType}` : ''}
+                    </span>
+                  </div>
+
+                  {data.detail.length === 0 ? (
+                    <p className="text-slate-500 text-sm text-center py-10">
+                      No delivery data found for this period.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[32rem] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-slate-900">
+                          <tr className="border-b border-slate-700">
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400 whitespace-nowrap">
+                              Ship Date
+                            </th>
+                            {isAdmin && (
+                              <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                                Branch
+                              </th>
+                            )}
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              SO #
+                            </th>
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Sale Type
+                            </th>
+                            <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-400">
+                              Ship Via
+                            </th>
+                            <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-400 pr-4">
+                              Lines
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {data.detail.map((r, i) => (
+                            <tr
+                              key={i}
+                              className="border-b border-slate-800 hover:bg-slate-800/40 transition"
+                            >
+                              <td className="px-4 py-2.5 text-slate-400 text-xs whitespace-nowrap tabular-nums">
+                                {r.ship_date}
+                                {isSaturday(r.ship_date) && (
+                                  <span className="text-[10px] text-slate-600 ml-1.5">Sat</span>
+                                )}
+                              </td>
+                              {isAdmin && (
+                                <td className="px-4 py-2.5 text-xs text-slate-500">
+                                  <button
+                                    onClick={() => handleBranchClick(r.system_id)}
+                                    className="hover:text-cyan-400 transition"
+                                    title={`Drill into ${BRANCH_LABEL[r.system_id] ?? r.system_id}`}
+                                  >
+                                    {r.system_id}
+                                  </button>
+                                </td>
+                              )}
+                              <td className="px-4 py-2.5">
+                                <Link
+                                  href={`/sales/orders/${r.so_id}`}
+                                  className="font-mono text-cyan-400 hover:text-cyan-300 text-xs transition"
+                                >
+                                  {r.so_id}
+                                </Link>
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-slate-400">{r.sale_type ?? '—'}</td>
+                              <td className="px-4 py-2.5 text-xs text-slate-400">{r.ship_via ?? '—'}</td>
+                              <td className="px-4 py-2.5 text-right text-xs font-mono tabular-nums text-slate-300 pr-4">
+                                {r.line_count}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

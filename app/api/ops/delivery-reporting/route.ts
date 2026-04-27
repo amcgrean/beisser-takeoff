@@ -54,7 +54,8 @@ export async function GET(req: NextRequest) {
   const saleTypeParam = searchParams.get('sale_type') ?? 'all';
   const windowParam = searchParams.get('window') ?? '30d';
   const branchParam = searchParams.get('branch') ?? '';
-  const detailLimit = Math.min(500, parseInt(searchParams.get('detail_limit') ?? '250', 10) || 250);
+  const dateParam = searchParams.get('date') ?? '';
+  const detailLimit = Math.min(1000, parseInt(searchParams.get('detail_limit') ?? '250', 10) || 250);
 
   const windowDays = windowParam === '7d' ? 7 : windowParam === '90d' ? 90 : 30;
   const since = new Date(Date.now() - windowDays * 86_400_000).toISOString().slice(0, 10);
@@ -93,6 +94,7 @@ export async function GET(req: NextRequest) {
           AND UPPER(COALESCE(soh.sale_type, '')) NOT IN ('DIRECT', 'WILLCALL', 'XINSTALL', 'HOLD')
           ${branchParam ? sql`AND soh.system_id = ${branchParam}` : sql``}
           ${saleTypeFilter ? sql`AND UPPER(COALESCE(soh.sale_type, '')) = ${saleTypeFilter}` : sql``}
+          ${dateParam ? sql`AND CAST(sh.ship_date AS DATE) = ${dateParam}::date` : sql``}
       ),
       uniq AS (
         SELECT DISTINCT system_id, so_id, ship_date, sale_type_raw, ship_via FROM filtered
