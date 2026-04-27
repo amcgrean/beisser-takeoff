@@ -1,50 +1,51 @@
--- Full-text search GIN index
+-- Full-text search GIN index on agility_items.
+-- Columns included depend on what exists in the table; primary_supplier and
+-- default_location are optional and only added when present.
 DO $$
+DECLARE
+  has_primary_supplier boolean;
+  has_default_location boolean;
+  fts_expr text;
 BEGIN
-  IF EXISTS (
+  SELECT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'agility_items'
+    WHERE table_schema = 'public' AND table_name = 'agility_items'
       AND column_name = 'primary_supplier'
-  ) THEN
-    EXECUTE $sql$
-      CREATE INDEX IF NOT EXISTS idx_agility_items_fts
-        ON public.agility_items
-        USING GIN (
-          to_tsvector('english',
-            coalesce(item, '') || ' ' ||
-            coalesce(description, '') || ' ' ||
-            coalesce(ext_description, '') || ' ' ||
-            coalesce(short_des, '') || ' ' ||
-            coalesce(size_, '') || ' ' ||
-            coalesce(type, '') || ' ' ||
-            coalesce(stocking_uom, '') || ' ' ||
-            coalesce(handling_code, '') || ' ' ||
-            coalesce(default_location, '') || ' ' ||
-            coalesce(primary_supplier, '')
-          )
-        )
-        WHERE is_deleted = false
-    $sql$;
-  ELSE
-    EXECUTE $sql$
-      CREATE INDEX IF NOT EXISTS idx_agility_items_fts
-        ON public.agility_items
-        USING GIN (
-          to_tsvector('english',
-            coalesce(item, '') || ' ' ||
-            coalesce(description, '') || ' ' ||
-            coalesce(ext_description, '') || ' ' ||
-            coalesce(size_, '') || ' ' ||
-            coalesce(type, '') || ' ' ||
-            coalesce(stocking_uom, '') || ' ' ||
-            coalesce(handling_code, '') || ' ' ||
-            coalesce(default_location, '')
-          )
-        )
-        WHERE is_deleted = false
-    $sql$;
+  ) INTO has_primary_supplier;
+
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agility_items'
+      AND column_name = 'default_location'
+  ) INTO has_default_location;
+
+  fts_expr :=
+    $s$ coalesce(item, '') || ' ' ||
+        coalesce(description, '') || ' ' ||
+        coalesce(ext_description, '') || ' ' ||
+        coalesce(short_des, '') || ' ' ||
+        coalesce(size_, '') || ' ' ||
+        coalesce(type, '') || ' ' ||
+        coalesce(stocking_uom, '') || ' ' ||
+        coalesce(handling_code, '') $s$;
+
+  IF has_default_location THEN
+    fts_expr := fts_expr || $s$ || ' ' || coalesce(default_location, '') $s$;
   END IF;
+
+  IF has_primary_supplier THEN
+    fts_expr := fts_expr || $s$ || ' ' || coalesce(primary_supplier, '') $s$;
+  END IF;
+
+  EXECUTE format(
+    $sql$
+      CREATE INDEX IF NOT EXISTS idx_agility_items_fts
+        ON public.agility_items
+        USING GIN (to_tsvector('english', %s))
+        WHERE is_deleted = false
+    $sql$,
+    fts_expr
+  );
 END $$;
 
 -- Composite index for product-group tile queries and browse filtering.
@@ -54,8 +55,7 @@ DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'agility_items'
+    WHERE table_schema = 'public' AND table_name = 'agility_items'
       AND column_name = 'product_major_code'
   ) THEN
     EXECUTE $sql$

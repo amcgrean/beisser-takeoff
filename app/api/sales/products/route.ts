@@ -9,7 +9,6 @@ import {
   buildItemSelect,
   buildSearchVector,
   getAgilityItemColumns,
-  hasPrimarySupplierColumn,
   isProductAdmin,
   parseIncludeInactive,
 } from './_shared';
@@ -61,7 +60,6 @@ export async function GET(req: NextRequest) {
   try {
     const sql = getErpSql();
     const columns = await getAgilityItemColumns(sql);
-    const hasPriSupplier = hasPrimarySupplierColumn(columns);
 
     // Base WHERE for agility_items (active/stock/branch/deleted filters)
     const baseParams: unknown[] = [];
@@ -93,7 +91,7 @@ export async function GET(req: NextRequest) {
           qParams as never[]
         ) as Promise<CountRow[]>,
         sql.unsafe(
-          `${buildItemSelect(hasPriSupplier)} FROM public.agility_items WHERE ${whereSql} ORDER BY item, system_id LIMIT ${limit} OFFSET ${offset}`,
+          `${buildItemSelect(columns)} FROM public.agility_items WHERE ${whereSql} ORDER BY item, system_id LIMIT ${limit} OFFSET ${offset}`,
           qParams as never[]
         ) as Promise<ProductRow[]>,
       ]);

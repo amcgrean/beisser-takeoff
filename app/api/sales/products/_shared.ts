@@ -15,7 +15,8 @@ const BASE_SEARCH_COLUMNS = [
   'type',
   'stocking_uom',
   'handling_code',
-  'default_location',
+  // default_location omitted — column name varies across agility_items versions;
+  // included dynamically below if present
 ] as const;
 
 let columnCache: Set<string> | null = null;
@@ -71,6 +72,7 @@ export function appendItemFilters(
 
 export function getSearchColumns(columns: Set<string>): string[] {
   const cols = BASE_SEARCH_COLUMNS.filter((c) => columns.has(c)) as string[];
+  if (columns.has('default_location')) cols.push('default_location');
   if (columns.has('primary_supplier')) cols.push('primary_supplier');
   return cols;
 }
@@ -96,7 +98,7 @@ export function formatProductLabel(code: string): string {
     .join(' ');
 }
 
-export function buildItemSelect(hasPriSupplier: boolean): string {
+export function buildItemSelect(columns: Set<string>): string {
   return `SELECT
     item AS item_number,
     description,
@@ -107,8 +109,8 @@ export function buildItemSelect(hasPriSupplier: boolean): string {
     stocking_uom,
     handling_code,
     qty_on_hand::float8 AS qty_on_hand,
-    default_location,
-    ${hasPriSupplier ? 'primary_supplier' : 'NULL::text'} AS primary_supplier,
+    ${columns.has('default_location') ? 'default_location' : 'NULL::text'} AS default_location,
+    ${columns.has('primary_supplier') ? 'primary_supplier' : 'NULL::text'} AS primary_supplier,
     system_id,
     active_flag,
     stock`;
