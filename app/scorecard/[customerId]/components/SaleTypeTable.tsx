@@ -1,3 +1,6 @@
+'use client';
+
+import { SortableHeader, TableToolbar, useTableSort, type ColumnDef } from '@/components/data-table';
 import type { SaleTypeRow } from '@/lib/scorecard/types';
 
 function fmt$(n: number): string {
@@ -33,35 +36,81 @@ interface Props {
   rows: SaleTypeRow[];
   baseYear: number;
   compareYear: number;
+  exportFilename?: string;
 }
 
-export default function SaleTypeTable({ rows, baseYear, compareYear }: Props) {
+export default function SaleTypeTable({ rows, baseYear, compareYear, exportFilename }: Props) {
+  // Columns are declared once and used for both sort + export. Accessors return
+  // raw numbers so sort and CSV are correct; cells handle display formatting.
+  const columns: ColumnDef<SaleTypeRow>[] = [
+    {
+      key: 'category',
+      header: 'Sale Type',
+      accessor: (r) => (r.isExcluded ? 'Hold' : r.category),
+    },
+    { key: 'sales_base', header: `${baseYear} Sales`, accessor: (r) => r.salesBase, align: 'right' },
+    { key: 'gp_base',    header: `${baseYear} GP`,    accessor: (r) => r.gpBase,    align: 'right' },
+    {
+      key: 'gm_base',
+      header: `${baseYear} GM%`,
+      accessor: (r) => gmPct(r.salesBase, r.gpBase),
+      exportFormat: (v) => (v === null || v === undefined ? '' : `${(v as number).toFixed(2)}%`),
+      align: 'right',
+    },
+    { key: 'sales_compare', header: `${compareYear} Sales`, accessor: (r) => r.salesCompare, align: 'right' },
+    { key: 'gp_compare',    header: `${compareYear} GP`,    accessor: (r) => r.gpCompare,    align: 'right' },
+    {
+      key: 'gm_compare',
+      header: `${compareYear} GM%`,
+      accessor: (r) => gmPct(r.salesCompare, r.gpCompare),
+      exportFormat: (v) => (v === null || v === undefined ? '' : `${(v as number).toFixed(2)}%`),
+      align: 'right',
+    },
+  ];
+
+  const { sortedRows, sort, toggle } = useTableSort({ rows, columns });
+
   if (rows.length === 0) return null;
 
+  // Totals are unaffected by sort — they're the sum of all rows regardless of order.
   const totalBase = rows.reduce((s, r) => s + r.salesBase, 0);
   const totalCompare = rows.reduce((s, r) => s + r.salesCompare, 0);
   const totalGpBase = rows.reduce((s, r) => s + r.gpBase, 0);
   const totalGpCompare = rows.reduce((s, r) => s + r.gpCompare, 0);
-
   const hasExcluded = rows.some((r) => r.isExcluded);
 
   return (
     <div className="space-y-2">
+      <div className="flex justify-end">
+        <TableToolbar rows={sortedRows} columns={columns} filename={exportFilename ?? `sale-types-${baseYear}`} />
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm print:text-xs">
           <thead>
-            <tr className="border-b border-slate-700">
-              <th className="pb-2 text-left text-slate-400 font-medium">Sale Type</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold pr-3">{baseYear} Sales</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold pr-3">{baseYear} GP</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold pr-3">{baseYear} GM%</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold pr-3">{compareYear} Sales</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold pr-3">{compareYear} GP</th>
-              <th className="pb-2 text-right text-slate-300 font-semibold">{compareYear} GM%</th>
+            <tr className="border-b border-slate-700 group">
+              <SortableHeader
+                columnKey="category"
+                label="Sale Type"
+                sort={sort}
+                onToggle={toggle}
+                align="left"
+                className="pb-2 text-left text-slate-400 font-medium"
+              />
+              {columns.slice(1).map((c) => (
+                <SortableHeader
+                  key={c.key}
+                  columnKey={c.key}
+                  label={c.header}
+                  sort={sort}
+                  onToggle={toggle}
+                  align="right"
+                  className={`pb-2 text-right text-slate-300 font-semibold ${c.key === 'gm_compare' ? '' : 'pr-3'}`}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <tr
                 key={r.category}
                 className={`border-b border-slate-800 ${r.isExcluded ? 'bg-amber-950/20' : ''}`}
