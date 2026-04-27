@@ -41,7 +41,7 @@ export default function ManagementCharts({
   const threeYearData = threeYear.map((e) => ({
     label: e.label,
     bar: e.sales,
-    line: e.sales > 0 ? (e.gp / e.sales) * 100 : 0,
+    line: e.sales !== 0 ? (e.gp / e.sales) * 100 : 0,
   }));
 
   // M2: branch comparison

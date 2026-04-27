@@ -40,7 +40,7 @@ export function ThreeYearChart({
   const data = entries.map((e) => ({
     label: e.label,
     bar: e.sales,
-    line: e.sales > 0 ? (e.gp / e.sales) * 100 : 0,
+    line: e.sales !== 0 ? (e.gp / e.sales) * 100 : 0,
   }));
   if (data.length === 0) return null;
   return (
@@ -229,24 +229,20 @@ export function BranchContributionPareto({
 /** Days-to-pay bullet for the customer scorecard. */
 export function DaysToPayCard({
   daysToPay,
-  customerAvg,
 }: {
   daysToPay: DaysToPayData;
+  /** customerAvg accepted for forward-compat; CustomerAvg doesn't include DTP today. */
   customerAvg?: CustomerAvg | null;
 }) {
-  // CustomerAvg doesn't include days-to-pay; the threshold is the customer's prior-period value
-  // when it exists, otherwise just the current value. We surface the "compare" side as context.
-  const _avg = customerAvg; // reserved — currently no avg field exposed for DTP
-  void _avg;
   return (
     <ChartCard
       title="Days to Pay"
-      subtitle="Lower is better — green when below prior year, red above"
+      subtitle="Lower is better — green when at-or-below prior year, red above"
     >
       <DaysToPayBullet
         value={daysToPay.base}
         compareValue={daysToPay.compare}
-        average={daysToPay.compare}
+        threshold={daysToPay.compare}
       />
     </ChartCard>
   );
