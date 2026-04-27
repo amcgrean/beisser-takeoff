@@ -9,7 +9,6 @@ import {
   buildItemSelect,
   buildSearchVector,
   getAgilityItemColumns,
-  hasPrimarySupplierColumn,
   isProductAdmin,
   parseIncludeInactive,
 } from './_shared';
@@ -61,23 +60,17 @@ export async function GET(req: NextRequest) {
   try {
     const sql = getErpSql();
     const columns = await getAgilityItemColumns(sql);
-    const hasPriSupplier = hasPrimarySupplierColumn(columns);
 
     // Base WHERE for agility_items (active/stock/branch/deleted filters)
     const baseParams: unknown[] = [];
     const baseWhere: string[] = [];
     appendItemFilters(baseWhere, baseParams, effectiveBranch, includeInactive);
 
-    // When browsing by major (and optionally minor), scope via scorecard subquery.
-    // Values come from auth session / nav cookie so literal interpolation is safe.
     if (majorCode) {
-      const esc = (s: string) => s.replace(/'/g, "''");
-      const minorClause = minorCode ? ` AND product_minor_code = '${esc(minorCode)}'` : '';
-      const branchClause = effectiveBranch ? ` AND branch_id = '${esc(effectiveBranch)}'` : '';
-      baseWhere.push(
-        `item IN (SELECT DISTINCT item_number FROM public.customer_scorecard_fact` +
-        ` WHERE is_deleted = false AND product_major_code = '${esc(majorCode)}'${minorClause}${branchClause})`
-      );
+      baseWhere.push(`product_major_code = ${addParam(baseParams, majorCode)}`);
+    }
+    if (minorCode) {
+      baseWhere.push(`product_minor_code = ${addParam(baseParams, minorCode)}`);
     }
 
     const runQuery = async (mode: SearchMode) => {
@@ -98,7 +91,7 @@ export async function GET(req: NextRequest) {
           qParams as never[]
         ) as Promise<CountRow[]>,
         sql.unsafe(
-          `${buildItemSelect(hasPriSupplier)} FROM public.agility_items WHERE ${whereSql} ORDER BY item, system_id LIMIT ${limit} OFFSET ${offset}`,
+          `${buildItemSelect(columns)} FROM public.agility_items WHERE ${whereSql} ORDER BY item, system_id LIMIT ${limit} OFFSET ${offset}`,
           qParams as never[]
         ) as Promise<ProductRow[]>,
       ]);

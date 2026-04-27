@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '../../../../../auth';
 import { getErpSql } from '../../../../../db/supabase';
 import { getSelectedBranchCode } from '@/lib/branch-context';
-import { formatProductLabel, isProductAdmin } from '../_shared';
+import {
+  addParam,
+  appendItemFilters,
+  formatProductLabel,
+  isProductAdmin,
+  parseIncludeInactive,
+} from '../_shared';
 
 type MinorRow = {
   code: string;
@@ -11,8 +17,8 @@ type MinorRow = {
 };
 
 // GET /api/sales/products/majors?group=<major_code>
-// Returns distinct product minors within the given major, from customer_scorecard_fact.
-// (Despite the route name "majors", it returns the second-level: product minors.)
+// Returns distinct product minors within the given major, from agility_items.
+// (Despite the route name "majors", it returns the second level: product minors.)
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -21,6 +27,7 @@ export async function GET(req: NextRequest) {
   if (!majorCode) return NextResponse.json({ error: 'Missing group' }, { status: 400 });
 
   const isAdmin = isProductAdmin(session.user);
+  const includeInactive = isAdmin && parseIncludeInactive(req.nextUrl.searchParams.get('includeInactive'));
   const effectiveBranch = isAdmin
     ? (await getSelectedBranchCode() ?? '')
     : (session.user.branch ?? '');
@@ -29,20 +36,16 @@ export async function GET(req: NextRequest) {
     const sql = getErpSql();
 
     const params: unknown[] = [];
-    const where: string[] = [
-      'is_deleted = false',
-      `NULLIF(product_minor_code, '') IS NOT NULL`,
-      `product_major_code = $${params.push(majorCode)}`,
-    ];
-    if (effectiveBranch) {
-      where.push(`branch_id = $${params.push(effectiveBranch)}`);
-    }
+    const where: string[] = [];
+    appendItemFilters(where, params, effectiveBranch, includeInactive);
+    where.push(`product_major_code = ${addParam(params, majorCode)}`);
+    where.push(`NULLIF(product_minor_code, '') IS NOT NULL`);
 
     const rows = (await sql.unsafe(
       `SELECT product_minor_code AS code,
               MAX(COALESCE(NULLIF(product_minor, ''), product_minor_code)) AS label,
-              COUNT(DISTINCT item_number)::int AS item_count
-       FROM public.customer_scorecard_fact
+              COUNT(DISTINCT item)::int AS item_count
+       FROM public.agility_items
        WHERE ${where.join(' AND ')}
        GROUP BY product_minor_code
        ORDER BY MAX(COALESCE(NULLIF(product_minor, ''), product_minor_code))`,
