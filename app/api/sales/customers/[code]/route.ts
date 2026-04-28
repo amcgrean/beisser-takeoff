@@ -28,11 +28,11 @@ export async function GET(
       state: string | null;
       zip: string | null;
       phone: string | null;
-      rep_1: string | null;
     };
 
     // rep_1 = sales rep on the order (account rep). salesperson = driver/route. We
-    // surface rep_1 as the order's "Rep" column.
+    // surface rep_1 as the order's "Rep" column. Note: rep_1 does NOT exist on
+    // agility_customers — only on agility_so_header.
     type OrderRow = {
       so_number: string;
       system_id: string;
@@ -59,7 +59,7 @@ export async function GET(
     const [custRows, openRows, historyRows, shiptoRows] = await Promise.all([
       sql<CustRow[]>`
         SELECT DISTINCT ON (cust_code) cust_key, cust_name, address_1, city, state, zip,
-               cust_phone AS phone, UPPER(TRIM(rep_1)) AS rep_1
+               cust_phone AS phone
         FROM agility_customers
         WHERE TRIM(cust_code) = TRIM(${code}) AND is_deleted = false
         ORDER BY cust_code, seq_num NULLS LAST
