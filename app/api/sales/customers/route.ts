@@ -14,23 +14,18 @@ export async function GET(req: NextRequest) {
   try {
     const sql = getErpSql();
 
-    // rep_1 is the sales rep assigned to the customer account (in agility_customers).
-    // agility_so_header.salesperson is the driver/route on a specific order — NOT the
-    // account rep — so we don't read it here.
-    //
-    // agility_customers has one row per ship-to. Pick the primary row (lowest seq_num)
-    // via DISTINCT ON so rep_1 is deterministic when different ship-tos have stale or
-    // divergent values.
+    // rep_1 is not a column on agility_customers (it lives on agility_so_header).
+    // agility_customers has one row per ship-to; pick the primary row (lowest seq_num)
+    // via DISTINCT ON to deduplicate.
     type CustRow = {
       cust_code: string;
       cust_name: string | null;
-      rep_1: string | null;
     };
 
     const custRows = await sql<CustRow[]>`
-      SELECT cust_code, cust_name, UPPER(TRIM(rep_1)) AS rep_1
+      SELECT cust_code, cust_name
       FROM (
-        SELECT DISTINCT ON (cust_code) cust_code, cust_name, rep_1
+        SELECT DISTINCT ON (cust_code) cust_code, cust_name
         FROM agility_customers
         WHERE is_deleted = false
           ${q ? sql`AND (cust_code ILIKE ${'%' + q + '%'} OR cust_name ILIKE ${'%' + q + '%'})` : sql``}
@@ -43,7 +38,7 @@ export async function GET(req: NextRequest) {
     const customers = custRows.map((r) => ({
       cust_code: r.cust_code,
       cust_name: r.cust_name,
-      rep_1: r.rep_1 || null,
+      rep_1: null,
     }));
 
     return NextResponse.json({ customers });
