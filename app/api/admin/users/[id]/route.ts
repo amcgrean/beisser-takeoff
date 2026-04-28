@@ -63,9 +63,9 @@ export async function PUT(
   try {
     const sql = getErpSql();
 
-    // Build parameterized SET clause
+    // Build parameterized SET clause — roles column is json type, needs explicit cast
     const setClauses = Object.keys(updates)
-      .map((k, i) => `${k} = $${i + 2}`)
+      .map((k, i) => k === 'roles' ? `${k} = $${i + 2}::json` : `${k} = $${i + 2}`)
       .join(', ');
     const values = [userId, ...Object.values(updates)] as (string | number | boolean | null)[];
 
