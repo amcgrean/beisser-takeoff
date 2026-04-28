@@ -66,7 +66,7 @@ export function appendItemFilters(
     where.push('stock = true');
   }
   if (branch) {
-    where.push(`system_id = ${addParam(params, branch)}`);
+    where.push(`item_branch = ${addParam(params, branch)}`);
   }
 }
 
@@ -111,7 +111,7 @@ export function buildItemSelect(columns: Set<string>): string {
     qty_on_hand::float8 AS qty_on_hand,
     ${columns.has('default_location') ? 'default_location' : 'NULL::text'} AS default_location,
     ${columns.has('primary_supplier') ? 'primary_supplier' : 'NULL::text'} AS primary_supplier,
-    system_id,
+    item_branch AS system_id,
     active_flag,
     stock`;
 }

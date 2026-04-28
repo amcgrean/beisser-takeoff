@@ -49,8 +49,11 @@ BEGIN
 END $$;
 
 -- Composite index for product-group tile queries and browse filtering.
--- Covers: branch filter (system_id), GROUP BY major, filter by minor.
+-- Covers: branch filter (item_branch), GROUP BY major, filter by minor.
 -- Used by: GET /api/sales/products/groups, /majors, and item browse.
+-- Drop old version (was incorrectly keyed on system_id) before recreating.
+DROP INDEX IF EXISTS public.idx_agility_items_group_browse;
+
 DO $$
 BEGIN
   IF EXISTS (
@@ -60,7 +63,7 @@ BEGIN
   ) THEN
     EXECUTE $sql$
       CREATE INDEX IF NOT EXISTS idx_agility_items_group_browse
-        ON public.agility_items (system_id, product_major_code, product_minor_code)
+        ON public.agility_items (item_branch, product_major_code, product_minor_code)
         WHERE is_deleted = false
           AND active_flag = true
           AND stock = true
