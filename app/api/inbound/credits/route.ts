@@ -113,6 +113,75 @@ function extractRmaNumber(subject: string | null, text: string | null, toAddress
   return fallback ? fallback[1] : 'UNKNOWN';
 }
 
+// Extract candidate address tokens from free-form text.
+// Returns the best candidate street fragment (house number + street name) if found.
+function extractAddressFragment(text: string): string | null {
+  // Match "123 Oak Street", "456 N Main Ave", "789 County Rd 12", etc.
+  const m = text.match(
+    /\b(\d{1,6}(?:\s+[NSEW]\.?)?\s+[A-Za-z][A-Za-z\s]{2,30}(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Dr(?:ive)?|Ln|Lane|Blvd|Pkwy|Hwy|Way|Ct|Court|Pl|Place|Loop|Trail|Trl|Creek|Lake|Park)\.?)\b/i
+  );
+  return m ? m[1].replace(/\s+/g, ' ').trim() : null;
+}
+
+// Try to find the ONE open credit memo whose ship-to address matches the address
+// fragment extracted from the email subject/body. Returns the so_id string if
+// exactly one CM matches; 'UNKNOWN' if zero or multiple match (ambiguous).
+async function lookupRmaByAddress(
+  subject: string | null,
+  text: string | null,
+): Promise<string> {
+  const searchText = `${subject ?? ''} ${text?.slice(0, 1000) ?? ''}`;
+  const fragment = extractAddressFragment(searchText);
+  if (!fragment) return 'UNKNOWN';
+
+  try {
+    const sql = getErpSql();
+    const rows = await sql<{ so_id: string }[]>`
+      SELECT soh.so_id::text AS so_id
+      FROM agility_so_header soh
+      WHERE soh.sale_type = 'Credit'
+        AND soh.so_status NOT IN ('I', 'C')
+        AND soh.is_deleted = false
+        AND soh.shipto_address_1 ILIKE ${'%' + fragment.split(' ').slice(0, 3).join(' ') + '%'}
+      LIMIT 5
+    `;
+
+    if (rows.length === 1) {
+      console.log(`[inbound/credits] Address match "${fragment}" → CM ${rows[0].so_id}`);
+      return rows[0].so_id;
+    }
+
+    if (rows.length > 1) {
+      // Try to narrow by city if multiple CMs share that street
+      const cityMatch = searchText.match(/\b([A-Za-z]{3,}(?:\s+[A-Za-z]+)?),?\s+(?:IA|Iowa)\b/i);
+      if (cityMatch) {
+        const city = cityMatch[1].trim();
+        const narrowRows = await sql<{ so_id: string }[]>`
+          SELECT soh.so_id::text AS so_id
+          FROM agility_so_header soh
+          WHERE soh.sale_type = 'Credit'
+            AND soh.so_status NOT IN ('I', 'C')
+            AND soh.is_deleted = false
+            AND soh.shipto_address_1 ILIKE ${'%' + fragment.split(' ').slice(0, 3).join(' ') + '%'}
+            AND soh.shipto_city ILIKE ${'%' + city + '%'}
+          LIMIT 5
+        `;
+        if (narrowRows.length === 1) {
+          console.log(`[inbound/credits] Address+city match "${fragment}, ${city}" → CM ${narrowRows[0].so_id}`);
+          return narrowRows[0].so_id;
+        }
+      }
+      console.warn(`[inbound/credits] Address "${fragment}" matched ${rows.length} open CMs — ambiguous, storing as UNKNOWN`);
+    } else {
+      console.warn(`[inbound/credits] Address "${fragment}" matched no open CMs`);
+    }
+  } catch (err) {
+    console.error('[inbound/credits] Address lookup failed', err);
+  }
+
+  return 'UNKNOWN';
+}
+
 function getR2Client(): S3Client {
   const accountId = process.env.R2_ACCOUNT_ID;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -173,7 +242,12 @@ export async function POST(req: NextRequest) {
   }
 
   const { email_id: emailId, from, subject, text, attachments } = payload.data;
-  const rmaNumber = extractRmaNumber(subject, text, toAddresses);
+  let rmaNumber = extractRmaNumber(subject, text, toAddresses);
+  if (rmaNumber === 'UNKNOWN') {
+    // Subject/body had no CM/RMA number — try matching the job address to an open credit memo.
+    rmaNumber = await lookupRmaByAddress(subject, text);
+    console.log(`[inbound/credits] Address-based RMA lookup result: ${rmaNumber}`);
+  }
   const receivedAt = payload.created_at ? new Date(payload.created_at) : new Date();
 
   if (!attachments?.length) {

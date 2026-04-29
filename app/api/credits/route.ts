@@ -19,7 +19,23 @@ export interface CreditMemo {
   latest_doc_received: string | null;
 }
 
-// GET /api/credits?q=&branch=&page=1
+export const ALLOWED_SORTS = [
+  'so_id', 'cust_name', 'reference', 'city', 'so_status', 'system_id', 'doc_count', 'created_date',
+] as const;
+export type SortCol = typeof ALLOWED_SORTS[number];
+
+const SORT_SQL: Record<SortCol, string> = {
+  so_id:        'soh.so_id',
+  cust_name:    'soh.cust_name',
+  reference:    'soh.reference',
+  city:         'soh.shipto_city',
+  so_status:    'soh.so_status',
+  system_id:    'soh.system_id',
+  doc_count:    'COUNT(ci.id)',
+  created_date: 'soh.created_date',
+};
+
+// GET /api/credits?q=&branch=&page=1&sort=created_date&dir=desc
 // Returns open credit memos (sale_type='Credit', not invoiced/closed/cancelled)
 // from agility_so_header. Branch-scoped: non-admins see only their branch.
 // LEFT JOINs credit_images for doc count per CM.
@@ -33,6 +49,17 @@ export async function GET(req: NextRequest) {
   const page   = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1);
   const limit  = 25;
   const offset = (page - 1) * limit;
+
+  const rawSort = searchParams.get('sort') ?? 'created_date';
+  const sort: SortCol = (ALLOWED_SORTS as readonly string[]).includes(rawSort)
+    ? (rawSort as SortCol)
+    : 'created_date';
+  const dir    = searchParams.get('dir') === 'asc' ? 'ASC' : 'DESC';
+  const nulls  = dir === 'DESC' ? 'NULLS LAST' : 'NULLS FIRST';
+  // Secondary stable sort: so_id DESC keeps page order consistent
+  const orderByStr = sort === 'so_id'
+    ? `${SORT_SQL[sort]} ${dir} ${nulls}`
+    : `${SORT_SQL[sort]} ${dir} ${nulls}, soh.so_id DESC`;
 
   const isAdmin =
     (session.user as { role?: string }).role === 'admin' ||
@@ -95,7 +122,7 @@ export async function GET(req: NextRequest) {
           soh.so_id, soh.system_id, soh.cust_code, soh.cust_name,
           soh.reference, soh.po_number, soh.so_status, soh.salesperson,
           soh.created_date, soh.expect_date, soh.shipto_address_1, soh.shipto_city
-        ORDER BY soh.created_date DESC NULLS LAST, soh.so_id DESC
+        ORDER BY ${sql.unsafe(orderByStr)}
         LIMIT ${limit} OFFSET ${offset}
       `,
       sql<{ total: number }[]>`
@@ -128,7 +155,7 @@ export async function GET(req: NextRequest) {
       latest_doc_received: r.latest_doc_received,
     }));
 
-    return NextResponse.json({ credits, total, page, limit });
+    return NextResponse.json({ credits, total, page, limit, sort, dir: dir.toLowerCase() });
   } catch (err) {
     console.error('[credits GET]', err);
     return NextResponse.json({ error: 'Query failed' }, { status: 500 });
