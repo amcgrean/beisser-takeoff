@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   MapPin, MapPinOff, RefreshCw, Search, ChevronLeft, ChevronRight,
-  Clock, CheckCircle2, XCircle, Zap, Calendar,
+  Clock, CheckCircle2, XCircle, Zap, Calendar, Globe,
 } from 'lucide-react';
 import type { JobRecord } from '../../api/admin/jobs/route';
+import type { GeocodeStatus } from '../../api/admin/geocode/status/route';
 import { cn } from '../../../src/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -130,6 +131,9 @@ export default function JobsClient() {
   const [dateFrom, setDateFrom]       = useState('');
   const [dateTo, setDateTo]           = useState('');
   const [activeQuick, setActiveQuick] = useState<string>('recent');
+  const [geocodeStatus, setGeocodeStatus] = useState<GeocodeStatus | null>(null);
+  const [geocodeRunning, setGeocodeRunning] = useState(false);
+  const [geocodeLastResult, setGeocodeLastResult] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const totalPages = Math.max(1, Math.ceil(total / 50));
 
@@ -173,8 +177,43 @@ export default function JobsClient() {
   // Initial load
   useEffect(() => {
     fetchJobs();
+    fetchGeocodeStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchGeocodeStatus = async () => {
+    try {
+      const res = await fetch('/api/admin/geocode/status');
+      if (res.ok) setGeocodeStatus(await res.json());
+    } catch (e) {
+      console.error('[geocode status]', e);
+    }
+  };
+
+  const runGeocodeBatch = async () => {
+    setGeocodeRunning(true);
+    setGeocodeLastResult(null);
+    try {
+      const res = await fetch('/api/admin/geocode/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_size: 500, state: 'IA' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGeocodeLastResult(data.error ?? 'Failed');
+      } else {
+        const matched = data.matched_city + data.matched_zip + data.matched_state_unique;
+        setGeocodeLastResult(`Geocoded ${matched}/${data.attempted} (city ${data.matched_city}, zip ${data.matched_zip}, state ${data.matched_state_unique}). ${data.remaining_failed.toLocaleString()} customers still pending.`);
+        await fetchGeocodeStatus();
+        await fetchJobs();
+      }
+    } catch (e) {
+      setGeocodeLastResult(String(e));
+    } finally {
+      setGeocodeRunning(false);
+    }
+  };
 
   // Debounced search
   const handleSearch = (val: string) => {
@@ -269,6 +308,45 @@ export default function JobsClient() {
           Refresh
         </button>
       </div>
+
+      {/* Geocode status panel */}
+      {geocodeStatus && (
+        <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 flex flex-wrap items-center gap-4">
+          <Globe className="w-4 h-4 text-cyan-400 shrink-0" />
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm flex-1 min-w-[300px]">
+            <span className="text-slate-300">
+              <span className="text-emerald-400 font-medium">{geocodeStatus.customers_with_gps.toLocaleString()}</span>
+              <span className="text-slate-500"> have GPS</span>
+            </span>
+            <span className="text-slate-300">
+              <span className="text-amber-400 font-medium">{geocodeStatus.customers_failed_legit.toLocaleString()}</span>
+              <span className="text-slate-500"> need geocoding</span>
+            </span>
+            <span className="text-slate-500 text-xs">
+              {geocodeStatus.customers_failed_junk.toLocaleString()} junk excluded
+            </span>
+            <span className="text-slate-500 text-xs">
+              · index: {geocodeStatus.index_total.toLocaleString()} rows
+            </span>
+          </div>
+          <button
+            onClick={runGeocodeBatch}
+            disabled={geocodeRunning || geocodeStatus.index_total === 0 || geocodeStatus.customers_failed_legit === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-sm font-medium transition disabled:opacity-30 disabled:cursor-not-allowed"
+            title={
+              geocodeStatus.index_total === 0
+                ? 'Load OpenAddresses data first via db/load-openaddresses.ts'
+                : 'Match 500 unmatched customer addresses against the geocode index'
+            }
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', geocodeRunning && 'animate-spin')} />
+            {geocodeRunning ? 'Running…' : 'Run Geocode (500)'}
+          </button>
+          {geocodeLastResult && (
+            <div className="basis-full text-xs text-slate-400">{geocodeLastResult}</div>
+          )}
+        </div>
+      )}
 
       {/* Quick filter chips */}
       <div className="flex flex-wrap gap-2">
