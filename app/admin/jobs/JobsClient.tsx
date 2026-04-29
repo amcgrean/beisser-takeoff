@@ -133,7 +133,9 @@ export default function JobsClient() {
   const [activeQuick, setActiveQuick] = useState<string>('recent');
   const [geocodeStatus, setGeocodeStatus] = useState<GeocodeStatus | null>(null);
   const [geocodeRunning, setGeocodeRunning] = useState(false);
+  const [geocodeProgress, setGeocodeProgress] = useState<{ matched: number; attempted: number; remaining: number } | null>(null);
   const [geocodeLastResult, setGeocodeLastResult] = useState<string | null>(null);
+  const geocodeCancelRef = useRef(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const totalPages = Math.max(1, Math.ceil(total / 50));
 
@@ -190,30 +192,66 @@ export default function JobsClient() {
     }
   };
 
-  const runGeocodeBatch = async () => {
+  // Loops POST /api/admin/geocode/run until the queue drains, the user cancels,
+  // or two consecutive batches make no progress (safety stop). Updates a live
+  // progress counter so the UI stays responsive across thousands of rows.
+  const runGeocodeAll = async () => {
     setGeocodeRunning(true);
     setGeocodeLastResult(null);
+    setGeocodeProgress({ matched: 0, attempted: 0, remaining: geocodeStatus?.customers_failed_legit ?? 0 });
+    geocodeCancelRef.current = false;
+
+    let totalMatched = 0;
+    let totalAttempted = 0;
+    let consecutiveNoProgress = 0;
+
     try {
-      const res = await fetch('/api/admin/geocode/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batch_size: 500, state: 'IA' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setGeocodeLastResult(data.error ?? 'Failed');
-      } else {
+      while (!geocodeCancelRef.current) {
+        const res = await fetch('/api/admin/geocode/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch_size: 500, state: 'IA' }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setGeocodeLastResult(data.error ?? `HTTP ${res.status}`);
+          break;
+        }
         const matched = data.matched_city + data.matched_zip + data.matched_state_unique;
-        setGeocodeLastResult(`Geocoded ${matched}/${data.attempted} (city ${data.matched_city}, zip ${data.matched_zip}, state ${data.matched_state_unique}). ${data.remaining_failed.toLocaleString()} customers still pending.`);
-        await fetchGeocodeStatus();
-        await fetchJobs();
+        totalMatched   += matched;
+        totalAttempted += data.attempted;
+        setGeocodeProgress({ matched: totalMatched, attempted: totalAttempted, remaining: data.remaining_failed });
+
+        // Stop conditions
+        if (data.attempted === 0 || data.remaining_failed === 0) break;
+        // If a batch returns 0 matches twice in a row, the rest of the queue
+        // is presumably addresses the index can't satisfy — stop rather than
+        // burn cycles forever.
+        if (matched === 0) {
+          consecutiveNoProgress++;
+          if (consecutiveNoProgress >= 2) {
+            setGeocodeLastResult(`Stopped — last 2 batches matched 0 of ${data.attempted}. ${data.remaining_failed.toLocaleString()} customers remain (likely missing from index).`);
+            break;
+          }
+        } else {
+          consecutiveNoProgress = 0;
+        }
+      }
+      if (geocodeCancelRef.current) {
+        setGeocodeLastResult(`Cancelled. Matched ${totalMatched.toLocaleString()} of ${totalAttempted.toLocaleString()} attempted.`);
+      } else if (!geocodeLastResult) {
+        setGeocodeLastResult(`Done. Matched ${totalMatched.toLocaleString()} of ${totalAttempted.toLocaleString()} attempted.`);
       }
     } catch (e) {
       setGeocodeLastResult(String(e));
     } finally {
+      await fetchGeocodeStatus();
+      await fetchJobs();
       setGeocodeRunning(false);
     }
   };
+
+  const cancelGeocode = () => { geocodeCancelRef.current = true; };
 
   // Debounced search
   const handleSearch = (val: string) => {
@@ -329,20 +367,54 @@ export default function JobsClient() {
               · index: {geocodeStatus.index_total.toLocaleString()} rows
             </span>
           </div>
-          <button
-            onClick={runGeocodeBatch}
-            disabled={geocodeRunning || geocodeStatus.index_total === 0 || geocodeStatus.customers_failed_legit === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-sm font-medium transition disabled:opacity-30 disabled:cursor-not-allowed"
-            title={
-              geocodeStatus.index_total === 0
-                ? 'Load OpenAddresses data first via db/load-openaddresses.ts'
-                : 'Match 500 unmatched customer addresses against the geocode index'
-            }
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', geocodeRunning && 'animate-spin')} />
-            {geocodeRunning ? 'Running…' : 'Run Geocode (500)'}
-          </button>
-          {geocodeLastResult && (
+          {!geocodeRunning ? (
+            <button
+              onClick={runGeocodeAll}
+              disabled={geocodeStatus.index_total === 0 || geocodeStatus.customers_failed_legit === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-sm font-medium transition disabled:opacity-30 disabled:cursor-not-allowed"
+              title={
+                geocodeStatus.index_total === 0
+                  ? 'Load OpenAddresses data first via db/load-openaddresses.ts'
+                  : `Geocode all ${geocodeStatus.customers_failed_legit.toLocaleString()} pending customer addresses`
+              }
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Run Geocode (auto)
+            </button>
+          ) : (
+            <button
+              onClick={cancelGeocode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/40 text-red-300 text-sm font-medium transition"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              Cancel
+            </button>
+          )}
+          {geocodeRunning && geocodeProgress && (
+            <div className="basis-full">
+              <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+                <RefreshCw className="w-3 h-3 animate-spin text-cyan-400" />
+                <span>
+                  Matched <span className="text-emerald-400 font-medium">{geocodeProgress.matched.toLocaleString()}</span>
+                  {' '}of {geocodeProgress.attempted.toLocaleString()} attempted ·
+                  {' '}<span className="text-amber-400 font-medium">{geocodeProgress.remaining.toLocaleString()}</span> remaining
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-cyan-500 transition-all"
+                  style={{
+                    width: `${
+                      geocodeProgress.matched + geocodeProgress.remaining > 0
+                        ? (geocodeProgress.matched / (geocodeProgress.matched + geocodeProgress.remaining)) * 100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {!geocodeRunning && geocodeLastResult && (
             <div className="basis-full text-xs text-slate-400">{geocodeLastResult}</div>
           )}
         </div>
